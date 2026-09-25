@@ -1324,16 +1324,14 @@ function updateSummon(dt) {
       SUMMON.blast.position.set(SUMMON.bx, 2.2, SUMMON.bz);
       SUMMON.blast.visible = true;
       // 엉덩이 방귀 — 근처 적은 모두 멀리 날아간다
-      var flung = 0;
       BEASTS.forEach(function (w) {
         if (w.dead > 0 || w.fly) return;
         if (Math.hypot(w.pos.x - SUMMON.bx, w.pos.z - SUMMON.bz) > 22 && w !== th) return;
-        launchAway(w, SUMMON.bx, SUMMON.bz); flung++;
+        launchAway(w, SUMMON.bx, SUMMON.bz);
       });
       if (DEER.state !== 'gone' && (th === DEER || DEER.pos.distanceTo(new THREE.Vector3(SUMMON.bx, 0, SUMMON.bz)) < 22)) {
-        launchAway(DEER, SUMMON.bx, SUMMON.bz); flung++;
+        launchAway(DEER, SUMMON.bx, SUMMON.bz);
       }
-      toast('💨 뿌우우웅——!', '엉덩이 방귀에 적 ' + flung + '마리가 멀리 날아갔다');
     }
     return;
   }
