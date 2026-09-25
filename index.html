@@ -181,7 +181,7 @@
       <li>🎁 숲 곳곳의 <b>보물상자</b>를 열면 아이템이 나옵니다. 멀리 있을수록 좋은 것이 들어 있습니다.</li>
       <li>👥 <b>팀원 4명</b>(AI)이 나무를 베고, 사냥하고, 고철을 모아 캠프 창고에 가져옵니다. 밤에는 모닥불 곁으로 돌아옵니다.</li>
       <li>🦌 밤에는 <b>사슴 괴물</b>이 사냥을 나옵니다. 손전등으로 정면을 비추거나 총을 쏘면 얼어붙습니다. 🐺 늑대와 🐻 곰은 밤마다 늘어납니다.</li>
-      <li>🍂 <b>3분마다 계절</b>이 바뀝니다. 🌸봄에는 나무가 분홍 꽃으로 덮이고, ☀️여름은 초록, 🍁가을에는 잎이 알록달록 물들고, ❄️겨울에는 <b>눈</b>이 내립니다.</li>
+      <li>🍂 <b>3분마다 계절</b>이 바뀝니다. 🌸봄에는 나무가 분홍 꽃으로 덮이고 <b>꽃잎이 흩날리며</b>, 🌴여름에는 숲이 <b>코코넛 나무</b>로 바뀌고(베면 코코넛), 🍁가을에는 잎이 물들어 <b>떨어지고</b>, ❄️겨울에는 <b>눈</b>이 내리고 <b>눈사람</b>이 나타납니다.</li>
       <li>🌧️ <b>비</b>는 봄·여름·가을에 언제 올지 모르게 내리고, 세게 오면 <b>천둥번개</b>가 칩니다. 빗속과 겨울에는 모닥불이 빨리 탑니다.</li>
       <li>👶 숲 가장자리의 <b>길 잃은 아이 4명</b>을 찾아 모닥불까지 데려오세요.</li>
     </ul>
@@ -244,6 +244,7 @@ var ITEM = {
   fan:    { name:'고장난 선풍기', icon:'🌀', bulk:true, scrap:4 },
   tire:   { name:'타이어',     icon:'🛞', bulk:true, scrap:2 },
   berry:  { name:'열매',       icon:'🍒', food:12 },
+  coconut:{ name:'코코넛',     icon:'🥥', food:22 },
   carrot: { name:'당근',       icon:'🥕', food:15 },
   apple:  { name:'사과',       icon:'🍎', food:18 },
   cooked: { name:'구운 고기',   icon:'🍖', food:45 },
@@ -450,6 +451,8 @@ var LEAF_PALETTE = [
 ];
 var TREES = [];
 var TREE_MESH = {};
+var PALM = { trunk:null, fronds:[], nuts:[] };
+var TREE_STYLE = 'pine';   // 여름에는 'palm'
 var dummy = new THREE.Object3D();
 
 (function buildTrees() {
@@ -473,6 +476,30 @@ var dummy = new THREE.Object3D();
   TREE_MESH.a = inst(coneA, mat(0xffffff, 0.95));
   TREE_MESH.b = inst(coneB, mat(0xffffff, 0.95));
   TREE_MESH.stump = inst(stumpG, mat(0xc9a676, 0.9));
+
+  // 여름용 코코넛 나무 — 휘어진 줄기, 늘어진 잎 7장, 코코넛 3개
+  var palmT = new THREE.CylinderGeometry(0.24, 0.4, 7.2, 7, 8); palmT.translate(0, 3.6, 0);
+  var pp = palmT.attributes.position;
+  for (var v = 0; v < pp.count; v++) {               // 위로 갈수록 한쪽으로 휜다
+    var yy = pp.getY(v); pp.setX(v, pp.getX(v) + 0.02 * yy * yy);
+    if (Math.round(yy * 10) % 9 === 0) { pp.setX(v, pp.getX(v) * 1.08); pp.setZ(v, pp.getZ(v) * 1.08); }
+  }
+  palmT.computeVertexNormals();
+  var topX = 0.02 * 7.2 * 7.2;
+  PALM.trunk = inst(palmT, mat(0x8a6a44, 0.95));
+  var frondM = new THREE.MeshStandardMaterial({ color:0x3f8f34, roughness:0.85, side:THREE.DoubleSide });
+  for (var f = 0; f < 7; f++) {
+    var fg = new THREE.BoxGeometry(0.85, 0.05, 3.4);
+    fg.translate(0, 0, 1.7); fg.rotateX(0.35 + (f % 2) * 0.2); fg.rotateY(f / 7 * Math.PI * 2);
+    fg.translate(topX, 7.1, 0);
+    PALM.fronds.push(inst(fg, frondM));
+  }
+  var nutM = mat(0x5a3a1e, 0.8);
+  for (var c = 0; c < 3; c++) {
+    var ng = new THREE.SphereGeometry(0.27, 8, 6);
+    ng.translate(topX + Math.cos(c * 2.1) * 0.32, 6.75, Math.sin(c * 2.1) * 0.32);
+    PALM.nuts.push(inst(ng, nutM));
+  }
   var leaf = LEAF_PALETTE[1];
   TREES.forEach(function (t, i) {
     TREE_MESH.a.setColorAt(i, leaf[i % leaf.length]);
@@ -486,12 +513,25 @@ var dummy = new THREE.Object3D();
 function setTreeShown(t, i, on) {
   t.shown = on;
   dummy.position.set(t.x, 0, t.z); dummy.rotation.set(0, t.rot, 0);
-  dummy.scale.setScalar(on ? t.s : 0.0001);
+  dummy.scale.setScalar(on && TREE_STYLE === 'pine' ? t.s : 0.0001);
   dummy.updateMatrix();
   ['trunk', 'a', 'b'].forEach(function (k) {
     TREE_MESH[k].setMatrixAt(i, dummy.matrix);
     TREE_MESH[k].instanceMatrix.needsUpdate = true;
   });
+  dummy.scale.setScalar(on && TREE_STYLE === 'palm' ? t.s : 0.0001);
+  dummy.updateMatrix();
+  [PALM.trunk].concat(PALM.fronds, PALM.nuts).forEach(function (m) {
+    if (!m) return;
+    m.setMatrixAt(i, dummy.matrix);
+    m.instanceMatrix.needsUpdate = true;
+  });
+}
+
+function setTreeStyle(style) {
+  if (TREE_STYLE === style) return;
+  TREE_STYLE = style;
+  TREES.forEach(function (t, i) { setTreeShown(t, i, !t.cut); });
 }
 
 function chopTree(t, dmg) {                       // 쓰러지면 true
@@ -1119,7 +1159,8 @@ function restart() {
   });
   DEER.state = 'gone'; DEER.group.visible = false;
   RAIN.on = false; RAIN.amount = 0; RAIN.next = 30 + Math.random() * 110; RAIN.flash = 0;
-  SEASON.shown = -1; SEASON.last = 0; SNOW.amount = 0;
+  SEASON.shown = -1; SEASON.last = 0; SNOW.amount = 0; FALL.amount = 0;
+  SNOWMEN.forEach(function (m) { m.grow = 0; m.group.visible = false; });
   camYaw = Math.PI; camPitch = 0.32;
   document.getElementById('start').classList.add('hide');
   document.getElementById('over').classList.add('hide');
@@ -1354,7 +1395,10 @@ function action() {
     if (bulkCount() >= bulkCap()) { toast('🎒 가득 찼다', '모닥불이나 분쇄기에 비우세요'); return; }
     if (chopTree(t, AXES[gear.axe].chop)) {
       var got = giveItem('log', 3, t);
-      toast('🪵 나무가 쓰러졌다! +' + got, '가방 ' + bulkCount() + ' / ' + bulkCap());
+      if (TREE_STYLE === 'palm') {                  // 여름 코코넛 나무는 코코넛도 떨어뜨린다
+        inv.coconut += 2;
+        toast('🌴 코코넛 나무가 쓰러졌다! 🪵+' + got + ' 🥥+2', '가방 ' + bulkCount() + ' / ' + bulkCap() + ' · Q 로 코코넛을 먹을 수 있다');
+      } else toast('🪵 나무가 쓰러졌다! +' + got, '가방 ' + bulkCount() + ' / ' + bulkCap());
     }
     return;
   }
@@ -1367,7 +1411,7 @@ function action() {
   }
 }
 
-var EAT_ORDER = ['cooked', 'apple', 'carrot', 'berry', 'cake', 'raw'];
+var EAT_ORDER = ['cooked', 'coconut', 'apple', 'carrot', 'berry', 'cake', 'raw'];
 function eat() {
   var k = null;
   for (var i = 0; i < EAT_ORDER.length; i++) if (inv[EAT_ORDER[i]] > 0) { k = EAT_ORDER[i]; break; }
@@ -1454,6 +1498,11 @@ function pushOut(pos, r) {
     if (d < min && d > 1e-4) { pos.x = t.x + dx / d * min; pos.z = t.z + dz / d * min; }
   }
   SOLIDS.forEach(function (s) {
+    var dx = pos.x - s.x, dz = pos.z - s.z, d = Math.hypot(dx, dz), min = s.r + r;
+    if (d < min && d > 1e-4) { pos.x = s.x + dx / d * min; pos.z = s.z + dz / d * min; }
+  });
+  SNOWMEN.forEach(function (s) {
+    if (s.grow < 0.5) return;
     var dx = pos.x - s.x, dz = pos.z - s.z, d = Math.hypot(dx, dz), min = s.r + r;
     if (d < min && d > 1e-4) { pos.x = s.x + dx / d * min; pos.z = s.z + dz / d * min; }
   });
@@ -1945,10 +1994,10 @@ function updateSurvival(dt) {
 
 var SEASON_LEN = 180;
 var SEASONS = [
-  { name:'봄',   icon:'🌸', msg:'나무마다 분홍 꽃이 피었다',            ground:[0x4f6e34, 0x7a6848], grass:0x6fa040, sky:0xa8d0ea },
-  { name:'여름', icon:'☀️', msg:'숲이 짙은 초록으로 물들었다',          ground:[0x3f5a2e, 0x6b5a40], grass:0x557a38, sky:0x9cc6e0 },
-  { name:'가을', icon:'🍁', msg:'잎이 빨갛고 노랗게 물들었다',          ground:[0x5e5a2c, 0x74583a], grass:0x9a8030, sky:0xb8c4cc },
-  { name:'겨울', icon:'❄️', msg:'눈이 내린다 — 추워서 모닥불이 빨리 타고 배도 빨리 고프다', ground:[0xe6ecf0, 0xc8ccc8], grass:0xe2eaee, sky:0xc4d0dc }
+  { name:'봄',   icon:'🌸', msg:'나무마다 분홍 꽃이 피고 꽃잎이 흩날린다',            ground:[0x4f6e34, 0x7a6848], grass:0x6fa040, sky:0xa8d0ea },
+  { name:'여름', icon:'🌴', msg:'숲이 코코넛 나무로 바뀌었다 — 베면 코코넛이 떨어진다',          ground:[0x3f5a2e, 0x6b5a40], grass:0x557a38, sky:0x9cc6e0 },
+  { name:'가을', icon:'🍁', msg:'잎이 빨갛고 노랗게 물들어 떨어진다',          ground:[0x5e5a2c, 0x74583a], grass:0x9a8030, sky:0xb8c4cc },
+  { name:'겨울', icon:'❄️', msg:'눈이 내리고 눈사람이 나타났다 — 추워서 모닥불이 빨리 탄다', ground:[0xe6ecf0, 0xc8ccc8], grass:0xe2eaee, sky:0xc4d0dc }
 ];
 var SEASON = { shown:-1, last:0, ground:[new THREE.Color(), new THREE.Color()], sky:new THREE.Color(0x9cc6e0) };
 var tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
@@ -1959,6 +2008,7 @@ function seasonLeft() { return SEASON_LEN - (game.time % SEASON_LEN); }
 // 바뀐 뒤 10초 동안 천천히 물든다 (맨 처음 봄은 바로)
 function updateSeason() {
   var s = seasonNow(), prevS = (s + 3) % 4;
+  setTreeStyle(s === 1 ? 'palm' : 'pine');
   var t = game.time < SEASON_LEN ? 1 : Math.min(1, (game.time % SEASON_LEN) / 10);
   if (game.running && s !== SEASON.last) {
     SEASON.last = s;
@@ -2023,6 +2073,108 @@ function updateSnow(dt) {
   snowGeo.attributes.position.needsUpdate = true;
   snowMat.opacity = SNOW.amount * 0.9;
 }
+/* ---- 눈사람 (겨울에만 나타났다가 봄이 오면 녹는다) ---- */
+var SNOWMEN = [];
+(function buildSnowmen() {
+  var snowM = mat(0xf4f8fb, 0.9), coalM = mat(0x1a1a1a, 0.8), carrotM = mat(0xf08a1c, 0.6),
+      stickM = mat(0x5a3b22, 0.9), scarfMs = [mat(0xd0302a, 0.8), mat(0x2a6ad0, 0.8), mat(0x2a9a4a, 0.8)];
+  var spots = [[9, 11], [-11, 9], [12, -8], [-3, -13]];         // 캠프 둘레 4개 + 숲 속 12개
+  for (var i = 0; i < 12; i++) { var sp = freeSpot(22, WORLD_R - 10); spots.push([sp.x, sp.z]); }
+  spots.forEach(function (p, i) {
+    var g = new THREE.Group(), inner = new THREE.Group();
+    [[0.85, 0.75], [0.62, 1.95], [0.45, 2.85]].forEach(function (b) {
+      var ball = new THREE.Mesh(new THREE.SphereGeometry(b[0], 14, 10), snowM);
+      ball.position.y = b[1]; ball.castShadow = true; inner.add(ball);
+    });
+    [-0.15, 0.15].forEach(function (ex) {
+      var eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), coalM); eye.position.set(ex, 2.98, 0.4); inner.add(eye);
+    });
+    for (var b2 = 0; b2 < 3; b2++) {
+      var btn = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), coalM); btn.position.set(0, 1.75 + b2 * 0.25, 0.6 - b2 * 0.02); inner.add(btn);
+    }
+    var nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.45, 8), carrotM);
+    nose.rotation.x = Math.PI / 2; nose.position.set(0, 2.88, 0.62); inner.add(nose);
+    [-1, 1].forEach(function (sd) {
+      var arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1.3, 5), stickM);
+      arm.position.set(sd * 1.05, 2.25, 0); arm.rotation.z = sd * 1.0; inner.add(arm);
+    });
+    var scarf = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.1, 6, 14), scarfMs[i % 3]);
+    scarf.rotation.x = Math.PI / 2; scarf.position.y = 2.45; inner.add(scarf);
+    var brim = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 12), coalM); brim.position.y = 3.25; inner.add(brim);
+    var hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 12), coalM); hat.position.y = 3.5; inner.add(hat);
+    g.add(inner);
+    g.position.set(p[0], 0, p[1]);
+    g.rotation.y = Math.atan2(CAMP.x - p[0], CAMP.z - p[1]) + (Math.random() - 0.5) * 0.8;
+    g.visible = false;
+    scene.add(g);
+    SNOWMEN.push({ x:p[0], z:p[1], r:0.85, group:g, inner:inner, grow:0 });
+  });
+})();
+
+function updateSnowmen(dt) {
+  var want = seasonNow() === 3 ? 1 : 0;
+  SNOWMEN.forEach(function (m, i) {
+    // 겨울이 오면 하나씩 솟아나고, 봄이 오면 푹 꺼지며 녹는다
+    var sp = want ? 0.5 : 0.35;
+    if (want && m.grow < 1 && SNOW.amount < 0.2 + i * 0.03) sp = 0;
+    m.grow += (want - m.grow) * Math.min(1, dt * sp * 2);
+    if (want === 0 && m.grow < 0.02) m.grow = 0;
+    m.group.visible = m.grow > 0.02;
+    m.inner.scale.set(1 + (1 - m.grow) * (want ? 0 : 0.5), Math.max(0.01, m.grow), 1 + (1 - m.grow) * (want ? 0 : 0.5));
+  });
+}
+
+/* ---- 봄 꽃잎 · 가을 낙엽 ---- */
+var FALL = { n:700, amount:0, kind:-1 };
+// 색마다 메시 하나씩 (5색) — 조각 j 는 j % 5 번째 메시에 그린다
+var fallGeo = new THREE.PlaneGeometry(0.2, 0.14);
+var fallMeshes = [];
+for (var fm = 0; fm < 5; fm++) {
+  var m = new THREE.InstancedMesh(fallGeo, new THREE.MeshLambertMaterial({ color:0xffffff, side:THREE.DoubleSide }), FALL.n / 5);
+  m.frustumCulled = false; m.count = 0;
+  scene.add(m); fallMeshes.push(m);
+}
+var fallP = [];
+for (var fi = 0; fi < FALL.n; fi++) {
+  fallP.push({ x:(Math.random() - 0.5) * 50, y:Math.random() * 16, z:(Math.random() - 0.5) * 50,
+               sp:0.5 + Math.random() * 0.8, ph:Math.random() * 6.28, spin:1 + Math.random() * 3 });
+}
+var PETALS = [0xf8b8d0, 0xf4a0c0, 0xfcd4e2, 0xfff4f8, 0xf090b8];
+var LEAVES = [0xd9531e, 0xe8a020, 0xb8301e, 0xf0c030, 0xa85a1a];
+var fallDummy = new THREE.Object3D();
+
+function updateFalling(dt) {
+  var s = seasonNow(), kind = s === 0 ? 0 : (s === 2 ? 2 : -1);
+  var want = kind >= 0 ? 1 : 0;
+  if (kind >= 0 && kind !== FALL.kind && FALL.amount < 0.05) {   // 계절이 바뀌면 색을 새로 칠한다
+    FALL.kind = kind;
+    var P = kind === 0 ? PETALS : LEAVES;
+    fallMeshes.forEach(function (m, i) { m.material.color.setHex(P[i]); m.material.emissive.setHex(P[i]); m.material.emissiveIntensity = 0.35; });
+  }
+  if (kind >= 0 && kind !== FALL.kind) want = 0;
+  FALL.amount += (want - FALL.amount) * Math.min(1, dt * 0.4);
+  var count = Math.floor(FALL.n * FALL.amount * (FALL.kind === 2 ? 0.8 : 1));
+  var per = Math.floor(count / 5);
+  fallMeshes.forEach(function (m) { m.count = per; });
+  if (!per) return;
+  var cx = player.pos.x, cz = player.pos.z, big = FALL.kind === 2 ? 1.6 : 1;
+  for (var j = 0; j < per * 5; j++) {
+    var f = fallP[j];
+    f.y -= f.sp * dt * (FALL.kind === 2 ? 1.3 : 1);
+    f.x += (Math.sin(game.time * 0.8 + f.ph) * 0.9 + 0.5) * dt;
+    f.z += Math.cos(game.time * 0.6 + f.ph) * 0.6 * dt;
+    if (f.y < 0.05) { f.y = 12 + Math.random() * 5; }
+    if (f.x < cx - 25) f.x += 50; else if (f.x > cx + 25) f.x -= 50;
+    if (f.z < cz - 25) f.z += 50; else if (f.z > cz + 25) f.z -= 50;
+    fallDummy.position.set(f.x, f.y, f.z);
+    fallDummy.rotation.set(game.time * f.spin + f.ph, game.time * f.spin * 0.7, f.ph);
+    fallDummy.scale.setScalar(big);
+    fallDummy.updateMatrix();
+    fallMeshes[j % 5].setMatrixAt(Math.floor(j / 5), fallDummy.matrix);
+  }
+  fallMeshes.forEach(function (m) { m.instanceMatrix.needsUpdate = true; });
+}
+
 function coldFactor() { return 1 + SNOW.amount * 0.3; }
 
 /* ------------------------------------------------------------------ *
@@ -2289,6 +2441,8 @@ function loop(now) {
   }
   updateChips(dt);
   updateSeason();
+  updateSnowmen(dt);
+  updateFalling(dt);
   updateWeather(dt);
   updateSky();
   updateCamera();
@@ -2303,7 +2457,8 @@ document.getElementById('againBtn').onclick = restart;
 window.SURVIVAL = {
   game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, BEASTS:BEASTS, DEER:DEER, KIDS:KIDS,
   BOTS:BOTS, PICKUPS:PICKUPS, CHESTS:CHESTS, TRAPS:TRAPS, RECIPES:RECIPES, BENCH:BENCH, GRINDER:GRINDER,
-  STORE_POS:STORE_POS, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
+  STORE_POS:STORE_POS, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, SNOWMEN:SNOWMEN, FALL:FALL,
+  treeStyle:function () { return TREE_STYLE; }, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
   action:action, eat:eat, heal:heal, shoot:shoot, placeTrap:placeTrap, inSafe:inSafe, restart:restart,
   isCraftOpen:function () { return craftOpen; },
   setCamYaw:function (y) { camYaw = y; }, CYCLE:CYCLE, DAY:DAY
