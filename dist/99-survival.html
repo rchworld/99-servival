@@ -111,6 +111,7 @@
 <div id="top" class="panel">
   <div class="big" id="dayName">☀️ 1일째 낮</div>
   <div class="sub" id="dayLeft">밤까지 1:30 · 버틴 밤 0 / 99</div>
+  <div class="sub" id="seasonLine">🌸 봄 — 여름까지 3:00</div>
   <div id="clock"><div id="clockIn"></div></div>
 </div>
 
@@ -172,7 +173,6 @@
       <div class="key"><b>F</b> 총 쏘기</div>
       <div class="key"><b>T</b> 곰덫 설치</div>
       <div class="key"><b>V</b>/<b>우클릭</b> 손전등</div>
-      <div class="key"><b>B</b> 비 내리기/그치기</div>
     </div>
     <ul class="rules">
       <li>🔥 <b>모닥불</b>에 통나무·석탄·연료통을 넣어 불을 지키세요. 불빛 안은 안전하고, 많이 넣을수록 레벨이 올라 넓어집니다.</li>
@@ -181,7 +181,8 @@
       <li>🎁 숲 곳곳의 <b>보물상자</b>를 열면 아이템이 나옵니다. 멀리 있을수록 좋은 것이 들어 있습니다.</li>
       <li>👥 <b>팀원 4명</b>(AI)이 나무를 베고, 사냥하고, 고철을 모아 캠프 창고에 가져옵니다. 밤에는 모닥불 곁으로 돌아옵니다.</li>
       <li>🦌 밤에는 <b>사슴 괴물</b>이 사냥을 나옵니다. 손전등으로 정면을 비추거나 총을 쏘면 얼어붙습니다. 🐺 늑대와 🐻 곰은 밤마다 늘어납니다.</li>
-      <li>🌧️ 가끔 <b>비</b>가 내리고, 세게 오면 <b>천둥번개</b>가 칩니다. 빗속에서는 모닥불이 빨리 타니 통나무를 넉넉히 넣으세요. <b>B</b> 로 직접 비를 내릴 수도 있습니다.</li>
+      <li>🍂 <b>3분마다 계절</b>이 바뀝니다. 🌸봄에는 나무가 분홍 꽃으로 덮이고, ☀️여름은 초록, 🍁가을에는 잎이 알록달록 물들고, ❄️겨울에는 <b>눈</b>이 내립니다.</li>
+      <li>🌧️ <b>비</b>는 봄·여름·가을에 언제 올지 모르게 내리고, 세게 오면 <b>천둥번개</b>가 칩니다. 빗속과 겨울에는 모닥불이 빨리 탑니다.</li>
       <li>👶 숲 가장자리의 <b>길 잃은 아이 4명</b>을 찾아 모닥불까지 데려오세요.</li>
     </ul>
     <button id="startBtn">숲으로 들어가기</button>
@@ -329,7 +330,7 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
  *  땅
  * ------------------------------------------------------------------ */
 
-var GROUND_MATS = [];
+var GROUND_MATS = [], GRASS_MAT = null;
 (function buildGround() {
   var ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 60, 64), mat(0x3f5a2e, 1));
   GROUND_MATS.push(ground.material);
@@ -340,6 +341,7 @@ var GROUND_MATS = [];
   var grassGeo = new THREE.ConeGeometry(0.12, 0.5, 4);
   grassGeo.translate(0, 0.25, 0);
   var grass = new THREE.InstancedMesh(grassGeo, mat(0x557a38, 1), 1400);
+  GRASS_MAT = grass.material;
   var d = new THREE.Object3D();
   for (var i = 0; i < 1400; i++) {
     var a = rnd() * 6.283, r = 17 + rnd() * (WORLD_R + 20);
@@ -447,6 +449,13 @@ function near(p, o, d) { return Math.hypot(p.x - o.x, p.z - o.z) < d; }
  *  나무 (인스턴스로 한 번에 그린다)
  * ------------------------------------------------------------------ */
 
+function pal(list) { return list.map(function (c) { return new THREE.Color(c); }); }
+var LEAF_PALETTE = [
+  pal([0xf4a6c6, 0xf8bcd6, 0xe68ab4, 0xfbd0e2, 0xf09cc0]),            // 봄 — 분홍 꽃
+  pal([0x2f5a2c, 0x264a26, 0x3a6634, 0x2d5236, 0x2f5a2c]),            // 여름 — 초록
+  pal([0xd9531e, 0xe8a020, 0xb8301e, 0xf0c030, 0xb86a1a]),            // 가을 — 단풍
+  pal([0xdfe8ee, 0xc8d8d0, 0xe8eef2, 0xb8ccc0, 0xd4e0e4])             // 겨울 — 눈 덮인 잎
+];
 var TREES = [];
 var TREE_MESH = {};
 var dummy = new THREE.Object3D();
@@ -472,10 +481,10 @@ var dummy = new THREE.Object3D();
   TREE_MESH.a = inst(coneA, mat(0xffffff, 0.95));
   TREE_MESH.b = inst(coneB, mat(0xffffff, 0.95));
   TREE_MESH.stump = inst(stumpG, mat(0xc9a676, 0.9));
-  var leaf = [new THREE.Color(0x2f5a2c), new THREE.Color(0x264a26), new THREE.Color(0x3a6634), new THREE.Color(0x2d5236)];
+  var leaf = LEAF_PALETTE[1];
   TREES.forEach(function (t, i) {
-    TREE_MESH.a.setColorAt(i, leaf[i % 4]);
-    TREE_MESH.b.setColorAt(i, leaf[(i + 1) % 4]);
+    TREE_MESH.a.setColorAt(i, leaf[i % leaf.length]);
+    TREE_MESH.b.setColorAt(i, leaf[(i + 1) % leaf.length]);
     dummy.position.set(t.x, 0, t.z); dummy.rotation.set(0, t.rot, 0); dummy.scale.setScalar(t.s);
     dummy.updateMatrix(); TREE_MESH.stump.setMatrixAt(i, dummy.matrix);
     setTreeShown(t, i, true);
@@ -1039,7 +1048,6 @@ addEventListener('keydown', function (e) {
   if (e.code === 'KeyH') heal();
   if (e.code === 'KeyF') shoot();
   if (e.code === 'KeyT') placeTrap();
-  if (e.code === 'KeyB') toggleRain();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1118,7 +1126,8 @@ function restart() {
     k.group.position.copy(k.pos);
   });
   DEER.state = 'gone'; DEER.group.visible = false;
-  RAIN.on = false; RAIN.amount = 0; RAIN.next = 25; RAIN.flash = 0; RAIN.forced = false;
+  RAIN.on = false; RAIN.amount = 0; RAIN.next = 30 + Math.random() * 110; RAIN.flash = 0;
+  SEASON.shown = -1; SEASON.last = 0; SNOW.amount = 0;
   camYaw = Math.PI; camPitch = 0.32;
   document.getElementById('start').classList.add('hide');
   document.getElementById('over').classList.add('hide');
@@ -1696,7 +1705,7 @@ function updateTrees(dt) {
 
 function updateFire(dt) {
   if (FIRE.fuel > 0) {
-    FIRE.fuel = Math.max(0, FIRE.fuel - (isNight() ? 1.15 : 0.65) * (gear.bigFire ? 0.7 : 1) * rainFuelFactor() * dt);
+    FIRE.fuel = Math.max(0, FIRE.fuel - (isNight() ? 1.15 : 0.65) * (gear.bigFire ? 0.7 : 1) * rainFuelFactor() * coldFactor() * dt);
     if (FIRE.fuel === 0) toast('🔥 모닥불이 꺼졌다!', '통나무를 넣으면 다시 붙습니다 — 안전한 곳이 사라졌다');
     else if (FIRE.fuel < 15 && !FIRE.warned) { FIRE.warned = true; toast('⚠️ 모닥불이 꺼져 간다', '통나무·석탄·연료통을 넣으세요'); }
   }
@@ -1894,7 +1903,7 @@ function updateSurvival(dt) {
   var p = player;
   shotCool -= dt;
   if (tracer.visible) { tracer.userData.t -= dt; if (tracer.userData.t <= 0) tracer.visible = false; }
-  p.hunger = Math.max(0, p.hunger - 0.34 * dt);
+  p.hunger = Math.max(0, p.hunger - 0.34 * (1 + SNOW.amount * 0.25) * dt);
   if (p.hunger <= 0) {
     p.hp -= 1.6 * dt;
     if (!p.starveMsg || game.time - p.starveMsg > 12) { p.starveMsg = game.time; toast('🍽️ 너무 배고프다!', '체력이 줄어듭니다 — Q 로 먹으세요'); }
@@ -1939,11 +1948,97 @@ function updateSurvival(dt) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  계절 — 3분마다 봄 → 여름 → 가을 → 겨울
+ * ------------------------------------------------------------------ */
+
+var SEASON_LEN = 180;
+var SEASONS = [
+  { name:'봄',   icon:'🌸', msg:'나무마다 분홍 꽃이 피었다',            ground:[0x4f6e34, 0x7a6848], grass:0x6fa040, sky:0xa8d0ea },
+  { name:'여름', icon:'☀️', msg:'숲이 짙은 초록으로 물들었다',          ground:[0x3f5a2e, 0x6b5a40], grass:0x557a38, sky:0x9cc6e0 },
+  { name:'가을', icon:'🍁', msg:'잎이 빨갛고 노랗게 물들었다',          ground:[0x5e5a2c, 0x74583a], grass:0x9a8030, sky:0xb8c4cc },
+  { name:'겨울', icon:'❄️', msg:'눈이 내린다 — 추워서 모닥불이 빨리 타고 배도 빨리 고프다', ground:[0xe6ecf0, 0xc8ccc8], grass:0xe2eaee, sky:0xc4d0dc }
+];
+var SEASON = { shown:-1, last:0, ground:[new THREE.Color(), new THREE.Color()], sky:new THREE.Color(0x9cc6e0) };
+var tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
+
+function seasonNow() { return Math.floor(game.time / SEASON_LEN) % 4; }
+function seasonLeft() { return SEASON_LEN - (game.time % SEASON_LEN); }
+
+// 바뀐 뒤 10초 동안 천천히 물든다 (맨 처음 봄은 바로)
+function updateSeason() {
+  var s = seasonNow(), prevS = (s + 3) % 4;
+  var t = game.time < SEASON_LEN ? 1 : Math.min(1, (game.time % SEASON_LEN) / 10);
+  if (game.running && s !== SEASON.last) {
+    SEASON.last = s;
+    toast(SEASONS[s].icon + ' ' + SEASONS[s].name + '이 왔다', SEASONS[s].msg);
+  }
+  var key = s + ':' + t.toFixed(2);
+  if (key === SEASON.shown) return;
+  SEASON.shown = key;
+  var A = LEAF_PALETTE[prevS], B = LEAF_PALETTE[s];
+  for (var i = 0; i < TREES.length; i++) {
+    tmpC.copy(A[i % A.length]).lerp(B[i % B.length], t);
+    TREE_MESH.a.setColorAt(i, tmpC);
+    tmpC2.copy(A[(i + 1) % A.length]).lerp(B[(i + 1) % B.length], t);
+    TREE_MESH.b.setColorAt(i, tmpC2);
+  }
+  TREE_MESH.a.instanceColor.needsUpdate = true;
+  TREE_MESH.b.instanceColor.needsUpdate = true;
+  var P = SEASONS[prevS], N = SEASONS[s];
+  SEASON.ground.forEach(function (c, i) { c.setHex(P.ground[i]).lerp(tmpC.setHex(N.ground[i]), t); });
+  if (GRASS_MAT) GRASS_MAT.color.setHex(P.grass).lerp(tmpC.setHex(N.grass), t);
+  SEASON.sky.setHex(P.sky).lerp(tmpC.setHex(N.sky), t);
+}
+
+/* ---- 눈 (겨울 내내 내린다) ---- */
+var SNOW = { amount:0, n:2200 };
+var snowPos = new Float32Array(SNOW.n * 3), snowSp = new Float32Array(SNOW.n), snowPh = new Float32Array(SNOW.n);
+var snowGeo = new THREE.BufferGeometry();
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+var snowTex = (function () {
+  var c = document.createElement('canvas'); c.width = c.height = 32;
+  var x = c.getContext('2d'), g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,.8)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(c);
+})();
+var snowMat = new THREE.PointsMaterial({ size:0.28, map:snowTex, transparent:true, opacity:0, depthWrite:false, color:0xffffff });
+var snowPts = new THREE.Points(snowGeo, snowMat);
+snowPts.frustumCulled = false;
+scene.add(snowPts);
+(function seedSnow() {
+  for (var i = 0; i < SNOW.n; i++) {
+    snowPos[i * 3] = (Math.random() - 0.5) * 70; snowPos[i * 3 + 1] = Math.random() * 30; snowPos[i * 3 + 2] = (Math.random() - 0.5) * 70;
+    snowSp[i] = 1.4 + Math.random() * 1.8; snowPh[i] = Math.random() * 6.28;
+  }
+})();
+
+function updateSnow(dt) {
+  SNOW.amount += ((seasonNow() === 3 ? 1 : 0) - SNOW.amount) * Math.min(1, dt * 0.35);
+  snowPts.visible = SNOW.amount > 0.02;
+  if (!snowPts.visible) return;
+  var cx = player.pos.x, cz = player.pos.z, hw = 35;
+  for (var i = 0; i < SNOW.n; i++) {
+    var k = i * 3;
+    var x = snowPos[k] + (Math.sin(game.time * 0.9 + snowPh[i]) * 0.6 + 0.4) * dt;
+    var y = snowPos[k + 1] - snowSp[i] * dt;
+    var z = snowPos[k + 2] + Math.cos(game.time * 0.7 + snowPh[i]) * 0.5 * dt;
+    if (y < 0) y += 30;
+    if (x < cx - hw) x += 70; else if (x > cx + hw) x -= 70;
+    if (z < cz - hw) z += 70; else if (z > cz + hw) z -= 70;
+    snowPos[k] = x; snowPos[k + 1] = y; snowPos[k + 2] = z;
+  }
+  snowGeo.attributes.position.needsUpdate = true;
+  snowMat.opacity = SNOW.amount * 0.9;
+}
+function coldFactor() { return 1 + SNOW.amount * 0.3; }
+
+/* ------------------------------------------------------------------ *
  *  날씨 — 비. 가끔 쏟아지고, 세게 오면 천둥번개가 친다.
  *  비가 오면 모닥불이 빨리 타고, 하늘이 어두워지고, 땅이 젖는다.
  * ------------------------------------------------------------------ */
 
-var RAIN = { on:false, heavy:false, amount:0, next:25, left:0, bolt:0, flash:0, forced:false };
+var RAIN = { on:false, heavy:false, amount:0, next:60, left:0, bolt:0, flash:0 };
 var DROPS = 2600, RAIN_BOX = { w:70, h:34 };
 var rainPos = new Float32Array(DROPS * 6), rainSpeed = new Float32Array(DROPS);
 var rainGeo = new THREE.BufferGeometry();
@@ -1953,7 +2048,6 @@ var rainLines = new THREE.LineSegments(rainGeo, rainMat);
 rainLines.frustumCulled = false;
 scene.add(rainLines);
 var WIND = { x:1.6, z:0.8 };
-var wetColors = GROUND_MATS.map(function (m) { return m.color.clone(); });
 var bolt = new THREE.PointLight(0xdfe8ff, 0, 400, 0);
 scene.add(bolt);
 
@@ -1970,21 +2064,17 @@ function setDrop(i, x, y, z) {
   rainPos[k + 3] = x - WIND.x * len * 4; rainPos[k + 4] = y + 0.9; rainPos[k + 5] = z - WIND.z * len * 4;
 }
 
-function startRain(heavy, forced) {
-  RAIN.on = true; RAIN.heavy = heavy; RAIN.forced = !!forced;
-  RAIN.left = forced ? 1e9 : 35 + Math.random() * 50;
+function startRain(heavy) {
+  RAIN.on = true; RAIN.heavy = heavy;
+  RAIN.left = 30 + Math.random() * 60;
   RAIN.bolt = 4 + Math.random() * 6;
   toast(heavy ? '⛈️ 폭풍우가 몰아친다!' : '🌧️ 비가 내리기 시작했다',
         '모닥불이 ' + (heavy ? '훨씬 ' : '') + '빨리 탑니다 — 통나무를 넉넉히 넣으세요');
 }
 function stopRain(msg) {
-  RAIN.on = false; RAIN.forced = false;
-  RAIN.next = 60 + Math.random() * 100;
+  RAIN.on = false;
+  RAIN.next = 40 + Math.random() * 150;               // 다음 비는 언제 올지 모른다
   if (msg) toast('🌤️ 비가 그쳤다', '');
-}
-function toggleRain() {                              // B 키 — 직접 비를 내리거나 그치게 한다
-  if (RAIN.on) stopRain(true);
-  else startRain(Math.random() < 0.35, true);
 }
 function rainFuelFactor() {                          // 모닥불 보호막이 있으면 비를 덜 맞는다
   return 1 + RAIN.amount * (RAIN.heavy ? 0.9 : 0.55) * (gear.bigFire ? 0.35 : 1);
@@ -1992,14 +2082,21 @@ function rainFuelFactor() {                          // 모닥불 보호막이 �
 
 function updateWeather(dt) {
   if (game.running) {
+    var winter = seasonNow() === 3;
     if (RAIN.on) {
       RAIN.left -= dt;
-      if (RAIN.left <= 0) stopRain(true);
-    } else {
+      if (winter) stopRain(false);                   // 겨울에는 비 대신 눈
+      else if (RAIN.left <= 0) stopRain(true);
+    } else if (!winter) {
       RAIN.next -= dt;
-      if (RAIN.next <= 0) startRain(Math.random() < (isNight() ? 0.45 : 0.25));
+      // 봄에 조금 더 자주, 밤에 폭풍우가 잦다
+      if (RAIN.next <= 0) {
+        if (Math.random() < (seasonNow() === 0 ? 0.8 : 0.6)) startRain(Math.random() < (isNight() ? 0.45 : 0.25));
+        else RAIN.next = 20 + Math.random() * 60;
+      }
     }
   }
+  updateSnow(dt);
   RAIN.amount += ((RAIN.on ? 1 : 0) - RAIN.amount) * Math.min(1, dt * 0.5);
   var a = RAIN.amount;
 
@@ -2024,7 +2121,7 @@ function updateWeather(dt) {
 
   // 땅이 젖어 어둡고 번들거린다
   GROUND_MATS.forEach(function (m, i) {
-    m.color.copy(wetColors[i]).multiplyScalar(1 - a * 0.35);
+    m.color.copy(SEASON.ground[i]).multiplyScalar(1 - a * 0.35);
     m.roughness = 1 - a * 0.45;
   });
 
@@ -2052,14 +2149,14 @@ function updateSky() {
   else if (t < DAY) b = (t - (DAY - 10)) / 10;
   else if (t < CYCLE - 8) b = 1;
   else b = 1 - (t - (CYCLE - 8)) / 8;
-  if (b < 0.5) skyC.copy(SKY_DAY).lerp(SKY_DUSK, b * 2);
+  if (b < 0.5) skyC.copy(SEASON.sky).lerp(SKY_DUSK, b * 2);
   else skyC.copy(SKY_DUSK).lerp(SKY_NIGHT, (b - 0.5) * 2);
   var ra = RAIN.amount;
   skyC.lerp(RAIN_SKY, ra * (0.75 - b * 0.45));
   scene.background.copy(skyC);
   scene.fog.color.copy(skyC);
   scene.fog.near = (30 - b * 18) * (1 - ra * 0.45);
-  scene.fog.far = (95 - b * 55) * (1 - ra * (RAIN.heavy ? 0.45 : 0.3));
+  scene.fog.far = (95 - b * 55) * (1 - ra * (RAIN.heavy ? 0.45 : 0.3)) * (1 - SNOW.amount * 0.25);
   sun.intensity = (0.9 * (1 - b) + 0.05) * (1 - ra * 0.65);
   hemi.intensity = (0.6 - b * 0.46) * (1 - ra * 0.3);
   var px = player.pos.x, pz = player.pos.z;
@@ -2112,6 +2209,9 @@ function updateHUD(dt) {
   document.getElementById('dayLeft').textContent =
     (night ? '아침까지 ' : '밤까지 ') + fmt(left) + ' · 버틴 밤 ' + game.nights + ' / ' + NIGHTS_GOAL +
     (RAIN.on ? (RAIN.heavy ? ' · ⛈️ 폭풍우' : ' · 🌧️ 비') : '');
+  var se = SEASONS[seasonNow()], nx = SEASONS[(seasonNow() + 1) % 4];
+  document.getElementById('seasonLine').textContent =
+    se.icon + ' ' + se.name + (seasonNow() === 3 ? ' · 눈' : '') + ' — ' + nx.name + '까지 ' + fmt(seasonLeft());
   bar('clockIn', night ? (t - DAY) / NIGHT * 100 : t / DAY * 100, night ? '#8fa8e0' : '#ffd070');
 
   var p = player;
@@ -2196,6 +2296,7 @@ function loop(now) {
     updateFire(0);
   }
   updateChips(dt);
+  updateSeason();
   updateWeather(dt);
   updateSky();
   updateCamera();
@@ -2210,7 +2311,7 @@ document.getElementById('againBtn').onclick = restart;
 window.SURVIVAL = {
   game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, BEASTS:BEASTS, DEER:DEER, KIDS:KIDS,
   BOTS:BOTS, PICKUPS:PICKUPS, CHESTS:CHESTS, TRAPS:TRAPS, RECIPES:RECIPES, BENCH:BENCH, GRINDER:GRINDER,
-  STORE_POS:STORE_POS, RAIN:RAIN, toggleRain:toggleRain, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
+  STORE_POS:STORE_POS, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
   action:action, eat:eat, heal:heal, shoot:shoot, placeTrap:placeTrap, inSafe:inSafe, restart:restart,
   isCraftOpen:function () { return craftOpen; },
   setCamYaw:function (y) { camYaw = y; }, CYCLE:CYCLE, DAY:DAY
