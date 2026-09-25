@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>숲속의 99일 밤</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#07090c; }
+  body { font-family:"Apple SD Gothic Neo", "Malgun Gothic", sans-serif; color:#fff; }
+  canvas { display:block; }
+
+  .panel {
+    position:fixed; z-index:10; pointer-events:none;
+    background:rgba(20,12,6,.66); border:1px solid rgba(255,170,90,.22);
+    border-radius:14px; backdrop-filter:blur(6px);
+  }
+  #top { top:14px; left:50%; transform:translateX(-50%); padding:8px 20px; text-align:center; }
+  #top .big { font-size:22px; font-weight:800; letter-spacing:.5px; }
+  #top .sub { font-size:12px; opacity:.75; }
+  #clock { height:4px; border-radius:2px; background:rgba(255,255,255,.14); overflow:hidden; margin-top:5px; }
+  #clockIn { height:100%; width:0%; background:#ffd070; }
+
+  #surv { bottom:14px; left:14px; min-width:230px; padding:10px 14px; font-size:13px; line-height:1.55; }
+  #surv .row { display:flex; justify-content:space-between; gap:14px; }
+  #surv .k { opacity:.75; }
+  .sbar { height:6px; border-radius:3px; background:rgba(255,255,255,.14); overflow:hidden; margin:1px 0 4px; }
+  .sbar div { height:100%; width:100%; }
+
+  #inv { top:14px; right:14px; padding:10px 14px; font-size:14px; line-height:1.7; text-align:right; }
+  #compass { bottom:14px; right:14px; width:118px; padding:10px; text-align:center; font-size:12px; }
+  #arrow { font-size:34px; line-height:40px; display:inline-block; transition:transform .08s linear; color:#ffb050; }
+
+  #prompt {
+    position:fixed; bottom:22%; left:50%; transform:translateX(-50%); z-index:10;
+    background:rgba(0,0,0,.55); border-radius:999px; padding:6px 16px; font-size:14px;
+    pointer-events:none; display:none;
+  }
+  #cross { position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+           border-radius:50%; background:rgba(255,255,255,.55); z-index:9; pointer-events:none; }
+  #hurt { position:fixed; inset:0; z-index:8; pointer-events:none; opacity:0;
+          box-shadow:inset 0 0 160px 40px rgba(200,0,0,.8); }
+
+  #toast {
+    position:fixed; top:17%; left:50%; transform:translateX(-50%) scale(.9);
+    z-index:12; font-size:28px; font-weight:800; text-align:center;
+    text-shadow:0 4px 18px rgba(0,0,0,.8); opacity:0; transition:.35s;
+    pointer-events:none; white-space:nowrap;
+  }
+  #toast.on { opacity:1; transform:translateX(-50%) scale(1); }
+  #toast small { display:block; font-size:15px; font-weight:500; opacity:.88; margin-top:6px; }
+
+  .screen {
+    position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at center, rgba(40,22,10,.9), rgba(4,5,7,.97));
+  }
+  .screen.hide { display:none; }
+  .card { width:min(720px, 92vw); max-height:92vh; overflow:auto; text-align:center; padding:30px; }
+  .card h1 { font-size:40px; margin-bottom:6px; }
+  .card h2 { font-size:32px; margin-bottom:10px; }
+  .card p.sub { opacity:.78; margin-bottom:18px; font-size:15px; line-height:1.7; }
+  .keys { display:flex; gap:9px; justify-content:center; flex-wrap:wrap; margin:14px 0 18px; }
+  .key { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16);
+         border-radius:10px; padding:7px 12px; font-size:13px; }
+  .key b { font-family:ui-monospace, monospace; color:#ffd070; }
+  ul.rules { text-align:left; font-size:14px; line-height:1.75; opacity:.88; margin:0 auto 20px; max-width:600px; padding-left:20px; }
+  button {
+    font:inherit; font-weight:800; font-size:18px; color:#1a0f06; cursor:pointer;
+    background:linear-gradient(180deg,#ffd98a,#ff9a3a); border:0; border-radius:12px; padding:13px 44px;
+  }
+  button:hover { filter:brightness(1.08); }
+  .stats { display:flex; gap:26px; justify-content:center; margin:18px 0 24px; flex-wrap:wrap; }
+  .stats div b { display:block; font-size:28px; }
+  .stats div span { opacity:.6; font-size:13px; }
+</style>
+</head>
+<body>
+
+<div id="top" class="panel">
+  <div class="big" id="dayName">☀️ 1일째 낮</div>
+  <div class="sub" id="dayLeft">밤까지 1:30 · 버틴 밤 0 / 99</div>
+  <div id="clock"><div id="clockIn"></div></div>
+</div>
+
+<div id="surv" class="panel">
+  <div class="row"><span class="k">❤️ 체력</span><span id="hpVal">100</span></div>
+  <div class="sbar"><div id="hpIn" style="background:#e94a5a"></div></div>
+  <div class="row"><span class="k">🍗 배고픔</span><span id="hungerVal">100</span></div>
+  <div class="sbar"><div id="hungerIn" style="background:#e8a23a"></div></div>
+  <div class="row"><span class="k">🏃 기력 (Shift)</span></div>
+  <div class="sbar"><div id="stamIn" style="background:#6ad0ff"></div></div>
+  <div class="row"><span class="k">🔦 손전등 (V)</span></div>
+  <div class="sbar"><div id="beamIn" style="background:#f2e6a0"></div></div>
+  <div class="row"><span class="k">🔥 모닥불</span><span id="fuelVal">70% · Lv1</span></div>
+  <div class="sbar"><div id="fuelIn" style="background:#ff8a2a"></div></div>
+</div>
+
+<div id="inv" class="panel">
+  <div>🪵 통나무 <b id="invLogs">0 / 10</b></div>
+  <div>🍒 열매 <b id="invBerries">0</b></div>
+  <div>🥩 날고기 <b id="invRaw">0</b></div>
+  <div>🍖 구운 고기 <b id="invCooked">0</b></div>
+  <div>👶 구한 아이 <b id="invKids">0 / 4</b></div>
+</div>
+
+<div id="compass" class="panel">
+  <div id="arrow">⬆</div>
+  <div id="campDist">모닥불 0m</div>
+  <div id="threat" style="opacity:.85"></div>
+</div>
+
+<div id="prompt"></div>
+<div id="cross"></div>
+<div id="hurt"></div>
+<div id="toast"></div>
+
+<div id="start" class="screen">
+  <div class="card">
+    <h1>🌲 숲속의 99일 밤</h1>
+    <p class="sub">어두운 숲 한가운데, 작은 모닥불 하나.<br>불을 꺼뜨리지 말고 <b>99번째 밤</b>까지 살아남으세요.</p>
+    <div class="keys">
+      <div class="key"><b>W A S D</b> / <b>방향키</b> 이동</div>
+      <div class="key"><b>Shift</b> 달리기</div>
+      <div class="key"><b>Space</b> 점프</div>
+      <div class="key"><b>마우스</b> 시점</div>
+      <div class="key"><b>E</b> / <b>클릭</b> 도끼질·줍기·불에 넣기</div>
+      <div class="key"><b>Q</b> 먹기</div>
+      <div class="key"><b>V</b> / <b>우클릭</b> 손전등</div>
+    </div>
+    <ul class="rules">
+      <li>🔥 <b>모닥불</b>은 계속 타들어 갑니다. 나무를 베어 통나무를 모아 넣으세요. 불빛 안은 안전합니다.
+        많이 넣을수록 모닥불 레벨이 올라 안전한 범위가 넓어집니다.</li>
+      <li>🍗 <b>배고픔</b>이 0이 되면 체력이 닳습니다. 덤불 열매를 따거나 늑대를 사냥해 모닥불에 고기를 구워 드세요.</li>
+      <li>🦌 밤이 되면 <b>사슴 괴물</b>이 사냥을 나옵니다. 모닥불 빛 안으로 도망치거나 손전등으로 정면을 비추면 얼어붙습니다.</li>
+      <li>🐺 <b>늑대</b>는 낮에도 돌아다니고, 밤이 거듭될수록 늘어납니다. 도끼로 세 번 치면 쓰러집니다.</li>
+      <li>👶 숲 깊은 곳에 <b>길 잃은 아이 4명</b>이 있습니다. 찾아서 모닥불까지 데려오세요.</li>
+    </ul>
+    <button id="startBtn">숲으로 들어가기</button>
+  </div>
+</div>
+
+<div id="over" class="screen hide">
+  <div class="card">
+    <h2 id="overTitle">🌲 숲에서 쓰러졌다</h2>
+    <p class="sub" id="overSub"></p>
+    <div class="stats">
+      <div><b id="ovNights">0</b><span>버틴 밤</span></div>
+      <div><b id="ovKids">0 / 4</b><span>구한 아이</span></div>
+      <div><b id="ovLevel">1</b><span>모닥불 레벨</span></div>
+      <div><b id="ovTime">0:00</b><span>플레이 시간</span></div>
+    </div>
+    <button id="againBtn">다시 도전</button>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script>
+(function () {
+'use strict';
+
+if (typeof THREE === 'undefined') {
+  document.body.innerHTML = '<div class="screen"><div class="card"><h2>3D 엔진을 불러오지 못했습니다</h2><p class="sub">인터넷 연결을 확인한 뒤 새로고침해 주세요.</p></div></div>';
+  return;
+}
+
+/* ------------------------------------------------------------------ *
+ *  설정
+ * ------------------------------------------------------------------ */
+
+var DAY = 90, NIGHT = 60, CYCLE = DAY + NIGHT;   // 낮 1분 30초 + 밤 1분 = 하루
+var NIGHTS_GOAL = 99;
+var WORLD_R = 112;                               // 숲의 반지름
+var CAMP = { x:0, z:0 };
+var LOG_MAX = 10;
+var G = 20;
+
+/* ------------------------------------------------------------------ *
+ *  렌더러 / 씬
+ * ------------------------------------------------------------------ */
+
+var renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+var scene = new THREE.Scene();
+var SKY_DAY = new THREE.Color(0x9cc6e0), SKY_DUSK = new THREE.Color(0xd08a5a), SKY_NIGHT = new THREE.Color(0x070a14);
+scene.background = SKY_DAY.clone();
+scene.fog = new THREE.Fog(SKY_DAY.clone(), 30, 90);
+
+var camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 260);
+
+var hemi = new THREE.HemisphereLight(0xdfeaf5, 0x3a4a2a, 0.6);
+scene.add(hemi);
+var sun = new THREE.DirectionalLight(0xfff0d6, 0.9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+var sc = sun.shadow.camera;
+sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 120;
+scene.add(sun); scene.add(sun.target);
+
+addEventListener('resize', function () {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function mat(color, rough, metal) {
+  return new THREE.MeshStandardMaterial({ color:color, roughness:rough === undefined ? 0.85 : rough, metalness:metal || 0 });
+}
+function box(w, h, d, m) { var o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.castShadow = true; return o; }
+
+var seed = 20260925;
+function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+/* ------------------------------------------------------------------ *
+ *  땅과 모닥불 빈터
+ * ------------------------------------------------------------------ */
+
+(function buildGround() {
+  var ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 60, 64), mat(0x3f5a2e, 1));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  var clearing = new THREE.Mesh(new THREE.CircleGeometry(15, 40), mat(0x6b5a40, 1));
+  clearing.rotation.x = -Math.PI / 2; clearing.position.y = 0.01; clearing.receiveShadow = true; scene.add(clearing);
+  // 풀 포기
+  var grassGeo = new THREE.ConeGeometry(0.12, 0.5, 4);
+  grassGeo.translate(0, 0.25, 0);
+  var grass = new THREE.InstancedMesh(grassGeo, mat(0x557a38, 1), 1400);
+  var d = new THREE.Object3D();
+  for (var i = 0; i < 1400; i++) {
+    var a = rnd() * 6.283, r = 16 + rnd() * (WORLD_R + 20);
+    d.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    d.rotation.y = rnd() * 6; d.scale.setScalar(0.6 + rnd() * 0.9);
+    d.updateMatrix(); grass.setMatrixAt(i, d.matrix);
+  }
+  scene.add(grass);
+})();
+
+/* ---- 모닥불 ---- */
+var FIRE = { fuel:70, fed:0, level:1, group:new THREE.Group(), flames:[], light:null, ring:null };
+
+(function buildFire() {
+  var g = FIRE.group, stone = mat(0x7d7a74, 0.95), logMat = mat(0x5a3b22, 0.95);
+  for (var i = 0; i < 12; i++) {
+    var a = i / 12 * Math.PI * 2;
+    var s = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), stone);
+    s.position.set(Math.cos(a) * 1.35, 0.15, Math.sin(a) * 1.35); s.scale.y = 0.7; s.castShadow = true; g.add(s);
+  }
+  for (var k = 0; k < 5; k++) {
+    var lg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 1.9, 7), logMat);
+    lg.rotation.z = Math.PI / 2 - 0.4; lg.rotation.y = k * Math.PI / 5 * 2;
+    lg.position.y = 0.4; g.add(lg);
+  }
+  [[0xff4a10, 0.8, 2.1], [0xff9a2a, 0.58, 1.6], [0xffe07a, 0.34, 1.1]].forEach(function (f) {
+    var fl = new THREE.Mesh(new THREE.ConeGeometry(f[1], f[2], 9),
+      new THREE.MeshBasicMaterial({ color:f[0], transparent:true, opacity:0.9 }));
+    fl.userData.h = f[2]; g.add(fl); FIRE.flames.push(fl);
+  });
+  FIRE.light = new THREE.PointLight(0xff9a3a, 2.5, 40, 1.2);
+  FIRE.light.position.y = 2.0; g.add(FIRE.light);
+  FIRE.ring = new THREE.Mesh(new THREE.RingGeometry(0.975, 1.0, 72),
+    new THREE.MeshBasicMaterial({ color:0xffa040, transparent:true, opacity:0.5, side:THREE.DoubleSide }));
+  FIRE.ring.rotation.x = -Math.PI / 2; FIRE.ring.position.y = 0.04; g.add(FIRE.ring);
+  g.position.set(CAMP.x, 0, CAMP.z);
+  scene.add(g);
+  // 통나무 의자와 작은 텐트
+  [[4.5, 0.6], [-4.2, -1.4], [0.8, 4.6], [-1.2, -4.6]].forEach(function (o) {
+    var b = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 2.4, 8), logMat);
+    b.rotation.z = Math.PI / 2; b.rotation.y = Math.atan2(o[0], o[1]) + Math.PI / 2;
+    b.position.set(o[0], 0.34, o[1]); b.castShadow = true; scene.add(b);
+  });
+  var tent = new THREE.Mesh(new THREE.ConeGeometry(2.2, 2.8, 4, 1, true),
+    new THREE.MeshStandardMaterial({ color:0x4f7d5a, roughness:0.95, side:THREE.DoubleSide }));
+  tent.position.set(-7.5, 1.4, 5.5); tent.rotation.y = 0.5; tent.castShadow = true; scene.add(tent);
+})();
+
+function safeR() { return FIRE.fuel > 0 ? 8 + FIRE.level * 3 : 0; }
+function campDist(p) { return Math.hypot(p.x - CAMP.x, p.z - CAMP.z); }
+function inSafe(p) { return campDist(p) < safeR(); }
+
+/* ------------------------------------------------------------------ *
+ *  나무 (인스턴스로 한 번에 그린다)
+ * ------------------------------------------------------------------ */
+
+var TREES = [];
+var TREE_MESH = {};
+var dummy = new THREE.Object3D();
+
+(function buildTrees() {
+  while (TREES.length < 340) {
+    var a = rnd() * Math.PI * 2, r = 17 + Math.sqrt(rnd()) * (WORLD_R + 14 - 17);
+    var x = Math.cos(a) * r, z = Math.sin(a) * r, ok = true;
+    for (var i = 0; i < TREES.length; i++) {
+      if (Math.hypot(TREES[i].x - x, TREES[i].z - z) < 4.6) { ok = false; break; }
+    }
+    if (!ok) continue;
+    var s = 0.8 + rnd() * 0.55;
+    TREES.push({ x:x, z:z, s:s, rot:rnd() * 6.28, r:0.45 * s, hp:4, regrow:0, cut:false, hide:false, shown:true });
+  }
+  var n = TREES.length;
+  function inst(geo, m) { var im = new THREE.InstancedMesh(geo, m, n); im.castShadow = true; im.receiveShadow = true; scene.add(im); return im; }
+  var trunkG = new THREE.CylinderGeometry(0.35, 0.5, 5.2, 7); trunkG.translate(0, 2.6, 0);
+  var coneA = new THREE.ConeGeometry(2.7, 4.6, 8); coneA.translate(0, 5.6, 0);
+  var coneB = new THREE.ConeGeometry(1.9, 3.6, 8); coneB.translate(0, 8.0, 0);
+  var stumpG = new THREE.CylinderGeometry(0.46, 0.52, 0.55, 7); stumpG.translate(0, 0.27, 0);
+  TREE_MESH.trunk = inst(trunkG, mat(0x5b3f28, 0.95));
+  TREE_MESH.a = inst(coneA, mat(0xffffff, 0.95));
+  TREE_MESH.b = inst(coneB, mat(0xffffff, 0.95));
+  TREE_MESH.stump = inst(stumpG, mat(0xc9a676, 0.9));
+  var leaf = [new THREE.Color(0x2f5a2c), new THREE.Color(0x264a26), new THREE.Color(0x3a6634), new THREE.Color(0x2d5236)];
+  TREES.forEach(function (t, i) {
+    TREE_MESH.a.setColorAt(i, leaf[i % 4]);
+    TREE_MESH.b.setColorAt(i, leaf[(i + 1) % 4]);
+    dummy.position.set(t.x, 0, t.z); dummy.rotation.set(0, t.rot, 0); dummy.scale.setScalar(t.s);
+    dummy.updateMatrix(); TREE_MESH.stump.setMatrixAt(i, dummy.matrix);
+    setTreeShown(t, i, true);
+  });
+})();
+
+function setTreeShown(t, i, on) {
+  t.shown = on;
+  dummy.position.set(t.x, 0, t.z); dummy.rotation.set(0, t.rot, 0);
+  dummy.scale.setScalar(on ? t.s : 0.0001);
+  dummy.updateMatrix();
+  ['trunk', 'a', 'b'].forEach(function (k) {
+    TREE_MESH[k].setMatrixAt(i, dummy.matrix);
+    TREE_MESH[k].instanceMatrix.needsUpdate = true;
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ *  열매 덤불
+ * ------------------------------------------------------------------ */
+
+var BUSHES = [];
+(function buildBushes() {
+  var bushMat = mat(0x356b30, 0.95), berryMat = mat(0xd02a3c, 0.4);
+  var bushGeo = new THREE.SphereGeometry(0.9, 10, 8), berryGeo = new THREE.SphereGeometry(0.12, 6, 5);
+  while (BUSHES.length < 34) {
+    var a = rnd() * Math.PI * 2, r = 18 + rnd() * (WORLD_R - 22);
+    var x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (TREES.some(function (t) { return Math.hypot(t.x - x, t.z - z) < 2.6; })) continue;
+    var g = new THREE.Group();
+    var b = new THREE.Mesh(bushGeo, bushMat); b.position.y = 0.6; b.scale.y = 0.75; b.castShadow = true; g.add(b);
+    var berries = new THREE.Group();
+    for (var n = 0; n < 8; n++) {
+      var ba = n / 8 * 6.28, be = new THREE.Mesh(berryGeo, berryMat);
+      be.position.set(Math.cos(ba) * 0.82, 0.4 + (n % 3) * 0.22, Math.sin(ba) * 0.82); berries.add(be);
+    }
+    g.add(berries); g.position.set(x, 0, z); scene.add(g);
+    BUSHES.push({ x:x, z:z, berries:berries, ripe:true, regrow:0 });
+  }
+})();
+
+/* ------------------------------------------------------------------ *
+ *  플레이어 (블록 사람 + 도끼)
+ * ------------------------------------------------------------------ */
+
+var player = {
+  pos:new THREE.Vector3(0, 0, 6), vel:new THREE.Vector3(), yaw:Math.PI, grounded:true, r:0.5,
+  group:new THREE.Group(), legs:[], arms:[], logPile:[], swing:0,
+  hp:100, hunger:100, stamina:100, beam:100, logs:0, berries:0, raw:0, cooked:0, rescued:0, hurtT:0
+};
+
+(function buildPlayer() {
+  var g = player.group;
+  var skin = mat(0xf2c89a, 0.7), shirt = mat(0xb8412e, 0.8), pants = mat(0x2f3c58, 0.8);
+  var torso = box(0.9, 0.9, 0.45, shirt); torso.position.y = 1.3; g.add(torso);
+  var head = box(0.55, 0.55, 0.55, skin); head.position.y = 2.05; g.add(head);
+  var hat = box(0.62, 0.18, 0.62, mat(0x3a2a1a, 0.9)); hat.position.y = 2.38; g.add(hat);
+  [-0.13, 0.13].forEach(function (ex) {
+    var eye = box(0.08, 0.08, 0.02, mat(0x111111, 0.5)); eye.position.set(ex, 2.1, 0.28); g.add(eye);
+  });
+  [-0.22, 0.22].forEach(function (lx) {
+    var hip = new THREE.Group(); hip.position.set(lx, 0.85, 0);
+    var leg = box(0.38, 0.85, 0.38, pants); leg.position.y = -0.42; hip.add(leg);
+    g.add(hip); player.legs.push(hip);
+  });
+  [-0.62, 0.62].forEach(function (ax, i) {
+    var sh = new THREE.Group(); sh.position.set(ax, 1.7, 0);
+    var arm = box(0.32, 0.85, 0.32, i ? skin : shirt); arm.position.y = -0.42; sh.add(arm);
+    if (i === 1) {                                  // 오른손 도끼
+      var handle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6), mat(0x7a5a38, 0.8));
+      handle.rotation.x = Math.PI / 2; handle.position.set(0, -0.85, 0.4); sh.add(handle);
+      var blade = box(0.08, 0.35, 0.3, mat(0xb8c0c8, 0.3, 0.8)); blade.position.set(0, -0.72, 0.85); sh.add(blade);
+    }
+    g.add(sh); player.arms.push(sh);
+  });
+  var logMat = mat(0x6b4a2c, 0.95);
+  for (var i = 0; i < 5; i++) {                      // 등에 멘 통나무
+    var lg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.95, 6), logMat);
+    lg.rotation.z = Math.PI / 2; lg.position.set(0, 1.0 + i * 0.22, -0.38); lg.visible = false;
+    g.add(lg); player.logPile.push(lg);
+  }
+  scene.add(g);
+})();
+
+// 밤에 발밑이 아예 안 보이지 않도록 은은한 빛
+var aura = new THREE.PointLight(0xa8b8ff, 0, 11, 1.6);
+scene.add(aura);
+
+var FLASH = { light:new THREE.SpotLight(0xfff4d6, 0, 42, 0.34, 0.45, 1.1), target:new THREE.Object3D() };
+scene.add(FLASH.light); scene.add(FLASH.target); FLASH.light.target = FLASH.target;
+
+/* ------------------------------------------------------------------ *
+ *  늑대
+ * ------------------------------------------------------------------ */
+
+var WOLVES = [];
+var WOLF_HIT = mat(0xc04040, 0.9);
+
+function makeWolf() {
+  var fur = mat(0x5d5b58, 0.95), dark = mat(0x3c3a38, 0.95), eyeM = new THREE.MeshBasicMaterial({ color:0xffe04a });
+  var g = new THREE.Group();
+  var body = box(0.7, 0.65, 1.6, fur); body.position.y = 0.95; g.add(body);
+  var head = box(0.5, 0.48, 0.55, fur); head.position.set(0, 1.25, 1.0); g.add(head);
+  var snout = box(0.26, 0.2, 0.4, dark); snout.position.set(0, 1.15, 1.4); g.add(snout);
+  [-1, 1].forEach(function (sd) {
+    var ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.24, 4), dark); ear.position.set(sd * 0.16, 1.58, 0.92); g.add(ear);
+    var eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), eyeM); eye.position.set(sd * 0.13, 1.32, 1.28); g.add(eye);
+  });
+  var tail = box(0.15, 0.15, 0.75, dark); tail.position.set(0, 1.05, -1.05); tail.rotation.x = 0.6; g.add(tail);
+  var legs = [];
+  [[-0.24, 0.55], [0.24, 0.55], [-0.24, -0.55], [0.24, -0.55]].forEach(function (l) {
+    var hip = new THREE.Group(); hip.position.set(l[0], 0.66, l[1]);
+    var leg = box(0.16, 0.66, 0.16, dark); leg.position.y = -0.33; hip.add(leg);
+    g.add(hip); legs.push(hip);
+  });
+  scene.add(g);
+  var w = { pos:new THREE.Vector3(), home:new THREE.Vector3(), goal:new THREE.Vector3(), yaw:0,
+            hp:3, dead:0, cool:0, knock:0, flash:0, group:g, legs:legs, body:body, fur:fur, chase:false };
+  placeWolf(w);
+  WOLVES.push(w);
+  return w;
+}
+
+function placeWolf(w) {
+  for (var i = 0; i < 30; i++) {
+    var a = Math.random() * Math.PI * 2, r = 45 + Math.random() * (WORLD_R - 50);
+    w.home.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    if (w.home.distanceTo(player.pos) > 35) break;
+  }
+  w.pos.copy(w.home); w.goal.copy(w.home);
+  w.hp = 3; w.dead = 0; w.knock = 0; w.chase = false; w.group.visible = true;
+}
+
+/* ------------------------------------------------------------------ *
+ *  사슴 괴물 — 밤에만
+ * ------------------------------------------------------------------ */
+
+var DEER = { pos:new THREE.Vector3(), yaw:0, state:'gone', t:0, group:new THREE.Group(), legs:[], arms:[], eyeLight:null };
+
+(function buildDeer() {
+  var g = DEER.group, black = mat(0x14110e, 0.95), bone = mat(0xe8e0cc, 0.6);
+  var torso = box(0.85, 1.6, 0.5, black); torso.position.y = 2.7; g.add(torso);
+  var neck = box(0.24, 0.6, 0.24, black); neck.position.y = 3.75; g.add(neck);
+  var skull = box(0.42, 0.42, 0.9, bone); skull.position.set(0, 4.15, 0.22); g.add(skull);
+  var jaw = box(0.3, 0.14, 0.58, bone); jaw.position.set(0, 3.9, 0.4); g.add(jaw);
+  [-1, 1].forEach(function (sd) {
+    var eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color:0xff2a1a }));
+    eye.position.set(sd * 0.15, 4.24, 0.43); g.add(eye);
+    var ant = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.3, 5), bone);
+    ant.position.set(sd * 0.38, 4.8, 0.05); ant.rotation.z = -sd * 0.55; g.add(ant);
+    var b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.65, 5), bone);
+    b1.position.set(sd * 0.6, 5.0, 0.24); b1.rotation.x = 0.7; g.add(b1);
+    var b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.7, 5), bone);
+    b2.position.set(sd * 0.72, 5.35, -0.05); b2.rotation.z = -sd * 1.1; g.add(b2);
+    var hip = new THREE.Group(); hip.position.set(sd * 0.24, 1.95, 0);
+    var leg = box(0.2, 1.95, 0.2, black); leg.position.y = -0.97; hip.add(leg); g.add(hip); DEER.legs.push(hip);
+    var sh = new THREE.Group(); sh.position.set(sd * 0.56, 3.4, 0);
+    var arm = box(0.15, 2.0, 0.15, black); arm.position.y = -1.0; sh.add(arm); g.add(sh); DEER.arms.push(sh);
+  });
+  DEER.eyeLight = new THREE.PointLight(0xff2a1a, 1.4, 12, 1.5);
+  DEER.eyeLight.position.set(0, 4.25, 0.7); g.add(DEER.eyeLight);
+  g.visible = false;
+  scene.add(g);
+})();
+
+/* ------------------------------------------------------------------ *
+ *  길 잃은 아이들
+ * ------------------------------------------------------------------ */
+
+var KIDS = [];
+(function buildKids() {
+  var shirts = [0x3a7bd5, 0xe0a030, 0xd0457a, 0x44aa66];
+  var names = ['민지', '도윤', '서아', '하준'];
+  [0.6, 2.2, 3.8, 5.3].forEach(function (a, i) {
+    var r = WORLD_R - 12;
+    var g = new THREE.Group();
+    var pants = mat(0x33415a, 0.8), skin = mat(0xf0c8a0, 0.6);
+    [-0.13, 0.13].forEach(function (lx) { var l = box(0.24, 0.55, 0.24, pants); l.position.set(lx, 0.28, 0); g.add(l); });
+    var body = box(0.55, 0.6, 0.32, mat(shirts[i], 0.7)); body.position.y = 0.85; g.add(body);
+    var head = box(0.42, 0.42, 0.42, skin); head.position.y = 1.4; g.add(head);
+    var marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.25), new THREE.MeshBasicMaterial({ color:0xffe04a }));
+    marker.position.y = 2.3; g.add(marker);
+    var glow = new THREE.PointLight(0xffe08a, 1.2, 12, 1.4); glow.position.y = 2.0; g.add(glow);
+    var home = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
+    g.position.copy(home); scene.add(g);
+    KIDS.push({ pos:home.clone(), home:home, state:'lost', group:g, marker:marker, glow:glow, name:names[i] });
+  });
+})();
+
+/* ------------------------------------------------------------------ *
+ *  나무 부스러기 파티클
+ * ------------------------------------------------------------------ */
+
+var chips = [];
+var chipGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+function burst(x, y, z, color, n) {
+  var m = new THREE.MeshBasicMaterial({ color:color });
+  for (var i = 0; i < n; i++) {
+    var c = new THREE.Mesh(chipGeo, m);
+    c.position.set(x, y, z);
+    c.userData.v = new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 4, (Math.random() - 0.5) * 5);
+    c.userData.t = 0.9;
+    scene.add(c); chips.push(c);
+  }
+}
+function updateChips(dt) {
+  for (var i = chips.length - 1; i >= 0; i--) {
+    var c = chips[i];
+    c.userData.t -= dt; c.userData.v.y -= G * dt;
+    c.position.addScaledVector(c.userData.v, dt);
+    if (c.position.y < 0.05) { c.position.y = 0.05; c.userData.v.set(0, 0, 0); }
+    if (c.userData.t <= 0) { scene.remove(c); chips.splice(i, 1); }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  입력
+ * ------------------------------------------------------------------ */
+
+var keys = {}, mouseBeam = false;
+var camYaw = Math.PI, camPitch = 0.32;
+
+function clearKeys() { for (var k in keys) keys[k] = false; mouseBeam = false; }
+addEventListener('blur', clearKeys);
+document.addEventListener('visibilitychange', function () { if (document.hidden) clearKeys(); });
+
+addEventListener('keydown', function (e) {
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0) e.preventDefault();
+  keys[e.code] = true;
+  if (!game.running) {
+    if ((e.code === 'Enter' || e.code === 'KeyR') && !e.repeat) restart();
+    return;
+  }
+  if (e.repeat) return;
+  if (e.code === 'KeyE' || e.code === 'KeyC') action();
+  if (e.code === 'KeyQ' || e.code === 'KeyX') eat();
+});
+addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+function locked() { return document.pointerLockElement === renderer.domElement; }
+function turnCamera(mx, my) {
+  camYaw -= mx * 0.0028;
+  camPitch = Math.max(-0.2, Math.min(1.2, camPitch + my * 0.0024));
+}
+var dragging = false, lastX = 0, lastY = 0;
+renderer.domElement.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+renderer.domElement.addEventListener('mousedown', function (e) {
+  if (e.button === 2) { mouseBeam = true; return; }
+  if (!locked()) {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    if (renderer.domElement.requestPointerLock) {
+      try { var r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(function () {}); } catch (err) {}
+    }
+    return;
+  }
+  if (game.running) action();
+});
+addEventListener('mouseup', function (e) { if (e.button === 2) mouseBeam = false; else dragging = false; });
+addEventListener('mousemove', function (e) {
+  if (locked()) turnCamera(e.movementX || 0, e.movementY || 0);
+  else if (dragging) { turnCamera(e.clientX - lastX, e.clientY - lastY); lastX = e.clientX; lastY = e.clientY; }
+});
+
+/* ------------------------------------------------------------------ *
+ *  게임 상태
+ * ------------------------------------------------------------------ */
+
+var game = { running:false, time:0, nights:0, wasNight:false };
+
+function isNight() { return (game.time % CYCLE) >= DAY; }
+function dayNo() { return Math.floor(game.time / CYCLE) + 1; }
+
+var toastTimer = null;
+function toast(text, sub) {
+  var el = document.getElementById('toast');
+  el.innerHTML = text + (sub ? '<small>' + sub + '</small>' : '');
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('on'); }, 2600);
+}
+function fmt(t) { var m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + (s < 10 ? '0' : '') + s; }
+
+function restart() {
+  clearKeys();
+  game.running = true; game.time = 0; game.nights = 0; game.wasNight = false;
+  var p = player;
+  p.pos.set(0, 0, 6); p.vel.set(0, 0, 0); p.yaw = Math.PI; p.grounded = true;
+  p.hp = 100; p.hunger = 100; p.stamina = 100; p.beam = 100;
+  p.logs = 0; p.berries = 0; p.raw = 0; p.cooked = 0; p.rescued = 0; p.hurtT = 0; p.swing = 0;
+  FIRE.fuel = 70; FIRE.fed = 0; FIRE.level = 1;
+  TREES.forEach(function (t, i) { t.hp = 4; t.cut = false; t.regrow = 0; t.hide = false; setTreeShown(t, i, true); });
+  BUSHES.forEach(function (b) { b.ripe = true; b.berries.visible = true; });
+  while (WOLVES.length > 5) { scene.remove(WOLVES.pop().group); }
+  while (WOLVES.length < 5) makeWolf();
+  WOLVES.forEach(placeWolf);
+  KIDS.forEach(function (k) {
+    k.state = 'lost'; k.pos.copy(k.home); k.marker.visible = true; k.glow.visible = true;
+    k.group.position.copy(k.pos);
+  });
+  DEER.state = 'gone'; DEER.group.visible = false;
+  camYaw = Math.PI; camPitch = 0.32;
+  document.getElementById('start').classList.add('hide');
+  document.getElementById('over').classList.add('hide');
+  toast('🔥 1일째 — 모닥불을 지켜라', '나무를 베어 통나무를 모으세요 (E 또는 클릭)');
+}
+
+function gameOver(title, sub) {
+  if (!game.running) return;
+  game.running = false;
+  if (document.exitPointerLock && locked()) document.exitPointerLock();
+  document.getElementById('overTitle').textContent = title;
+  document.getElementById('overSub').textContent = sub;
+  document.getElementById('ovNights').textContent = game.nights;
+  document.getElementById('ovKids').textContent = player.rescued + ' / 4';
+  document.getElementById('ovLevel').textContent = FIRE.level;
+  document.getElementById('ovTime').textContent = fmt(game.time);
+  document.getElementById('over').classList.remove('hide');
+}
+
+/* ------------------------------------------------------------------ *
+ *  행동 — E / 클릭
+ * ------------------------------------------------------------------ */
+
+var actCool = 0;
+
+function nearestTree(maxD) {
+  var p = player.pos, best = -1, bd = maxD;
+  for (var i = 0; i < TREES.length; i++) {
+    var t = TREES[i];
+    if (t.cut) continue;
+    var d = Math.hypot(t.x - p.x, t.z - p.z) - t.r;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function nearestWolf(maxD) {
+  var best = null, bd = maxD;
+  WOLVES.forEach(function (w) {
+    if (w.dead > 0) return;
+    var d = Math.hypot(w.pos.x - player.pos.x, w.pos.z - player.pos.z);
+    if (d < bd) { bd = d; best = w; }
+  });
+  return best;
+}
+function nearestBush(maxD) {
+  var best = null, bd = maxD;
+  BUSHES.forEach(function (b) {
+    if (!b.ripe) return;
+    var d = Math.hypot(b.x - player.pos.x, b.z - player.pos.z);
+    if (d < bd) { bd = d; best = b; }
+  });
+  return best;
+}
+
+function action() {
+  if (actCool > 0) return;
+  actCool = 0.32;
+  player.swing = 0.3;
+  var p = player.pos;
+
+  if (campDist(p) < 4.2) {
+    var did = false;
+    if (player.logs > 0) {
+      var n = player.logs, lv = FIRE.level;
+      FIRE.fuel = Math.min(100, FIRE.fuel + n * 14);
+      FIRE.fed += n; player.logs = 0;
+      FIRE.level = Math.min(6, 1 + Math.floor(FIRE.fed / 12));
+      if (FIRE.level > lv) toast('🔥 모닥불 레벨 ' + FIRE.level + '!', '안전한 범위가 ' + safeR() + 'm 로 넓어졌다');
+      else toast('🔥 통나무 ' + n + '개를 넣었다', '연료 ' + Math.round(FIRE.fuel) + '% · 다음 레벨까지 ' + (12 - FIRE.fed % 12) + '개');
+      did = true;
+    }
+    if (player.raw > 0 && FIRE.fuel > 0) {
+      player.cooked += player.raw;
+      if (!did) toast('🍖 고기 ' + player.raw + '개를 구웠다', 'Q 로 먹으면 배가 든든해집니다');
+      player.raw = 0; did = true;
+    }
+    if (did) return;
+  }
+
+  var w = nearestWolf(2.9);
+  if (w) {
+    var dx = w.pos.x - p.x, dz = w.pos.z - p.z, d = Math.hypot(dx, dz) || 1;
+    w.hp--; w.flash = 0.25; w.knock = 0.6;
+    w.pos.x += dx / d * 2.4; w.pos.z += dz / d * 2.4;
+    burst(w.pos.x, 1.0, w.pos.z, 0x9a2020, 7);
+    if (w.hp <= 0) {
+      w.dead = 60; w.group.visible = false;
+      player.raw += 2;
+      toast('🐺 늑대를 쓰러뜨렸다!', '날고기 +2 — 모닥불에서 E 로 구우세요');
+    }
+    return;
+  }
+
+  var ti = nearestTree(1.9);
+  if (ti >= 0) {
+    if (player.logs >= LOG_MAX) { toast('🪵 더 들 수 없다', '모닥불에 가서 E 로 넣으세요'); return; }
+    var t = TREES[ti];
+    t.hp--;
+    burst(t.x, 1.2, t.z, 0xc9a676, 6);
+    if (t.hp <= 0) {
+      t.cut = true; t.regrow = 150;
+      setTreeShown(t, ti, false);
+      burst(t.x, 3, t.z, 0x2f5a2c, 14);
+      var got = Math.min(3, LOG_MAX - player.logs);
+      player.logs += got;
+      toast('🪵 나무가 쓰러졌다! +' + got, '통나무 ' + player.logs + ' / ' + LOG_MAX);
+    }
+    return;
+  }
+
+  var b = nearestBush(2.4);
+  if (b) {
+    b.ripe = false; b.regrow = 70; b.berries.visible = false;
+    player.berries += 3;
+    toast('🍒 열매 3개', 'Q 로 먹기');
+  }
+}
+
+function eat() {
+  var p = player;
+  if (p.cooked > 0) { p.cooked--; p.hunger = Math.min(100, p.hunger + 45); toast('🍖 구운 고기', '배고픔 +45'); }
+  else if (p.berries > 0) { p.berries--; p.hunger = Math.min(100, p.hunger + 12); toast('🍒 열매', '배고픔 +12'); }
+  else if (p.raw > 0) { p.raw--; p.hunger = Math.min(100, p.hunger + 15); p.hp -= 10; toast('🤢 날고기…', '배고픔 +15 · 배탈로 체력 -10'); }
+  else toast('먹을 것이 없다', '덤불 열매를 따거나 늑대를 사냥하세요');
+}
+
+function hurt(dmg, fx, fz, push) {
+  var p = player;
+  p.hp -= dmg; p.hurtT = 0.5;
+  var dx = p.pos.x - fx, dz = p.pos.z - fz, d = Math.hypot(dx, dz) || 1;
+  p.vel.x = dx / d * push; p.vel.z = dz / d * push; p.vel.y = 5; p.grounded = false;
+  burst(p.pos.x, 1.2, p.pos.z, 0xc02030, 8);
+}
+
+/* ------------------------------------------------------------------ *
+ *  업데이트
+ * ------------------------------------------------------------------ */
+
+function stepToward(pos, tx, tz, speed, dt) {
+  var dx = tx - pos.x, dz = tz - pos.z, d = Math.hypot(dx, dz);
+  if (d < 0.01) return null;
+  var s = Math.min(d, speed * dt);
+  pos.x += dx / d * s; pos.z += dz / d * s;
+  return Math.atan2(dx, dz);
+}
+
+function pushOutOfTrees(pos, r) {
+  for (var i = 0; i < TREES.length; i++) {
+    var t = TREES[i];
+    if (t.cut) continue;
+    var dx = pos.x - t.x, dz = pos.z - t.z;
+    if (Math.abs(dx) > 3 || Math.abs(dz) > 3) continue;
+    var d = Math.hypot(dx, dz), min = t.r + r;
+    if (d < min && d > 1e-4) { pos.x = t.x + dx / d * min; pos.z = t.z + dz / d * min; }
+  }
+}
+function keepInWorld(pos, limit) {
+  var d = Math.hypot(pos.x, pos.z);
+  if (d > limit) { pos.x *= limit / d; pos.z *= limit / d; }
+}
+function keepOutOfCamp(pos, pad) {
+  var r = safeR() + pad, dx = pos.x - CAMP.x, dz = pos.z - CAMP.z, d = Math.hypot(dx, dz);
+  if (r > pad && d < r && d > 1e-4) { pos.x = CAMP.x + dx / d * r; pos.z = CAMP.z + dz / d * r; }
+}
+
+function updatePlayer(dt) {
+  var p = player;
+  var fwd = 0, side = 0;
+  if (keys.KeyW || keys.ArrowUp) fwd += 1;
+  if (keys.KeyS || keys.ArrowDown) fwd -= 1;
+  if (keys.KeyA || keys.ArrowLeft) side -= 1;
+  if (keys.KeyD || keys.ArrowRight) side += 1;
+  var fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+  var mx = fx * fwd - fz * side, mz = fz * fwd + fx * side;
+  var ml = Math.hypot(mx, mz);
+  if (ml > 1) { mx /= ml; mz /= ml; }
+
+  var running = (keys.ShiftLeft || keys.ShiftRight) && ml > 0.1 && p.stamina > 0;
+  if (running) p.stamina = Math.max(0, p.stamina - 22 * dt);
+  else p.stamina = Math.min(100, p.stamina + 14 * dt);
+  var speed = running ? 9 : 5.6;
+  if (p.hunger <= 0) speed *= 0.8;
+
+  if (ml > 0.01) {
+    var want = Math.atan2(mx, mz);
+    var diff = ((want - p.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    p.yaw += diff * Math.min(1, 12 * dt);
+  }
+  var accel = p.grounded ? 14 : 3;
+  p.vel.x += (mx * speed - p.vel.x) * Math.min(1, accel * dt);
+  p.vel.z += (mz * speed - p.vel.z) * Math.min(1, accel * dt);
+  if (keys.Space && p.grounded) { p.vel.y = 7.2; p.grounded = false; }
+  p.vel.y -= G * dt;
+  p.pos.addScaledVector(p.vel, dt);
+  if (p.pos.y <= 0) { p.pos.y = 0; p.vel.y = 0; p.grounded = true; }
+  pushOutOfTrees(p.pos, p.r);
+  if (campDist(p.pos) < 1.9) {                     // 모닥불 안으로는 못 들어간다
+    var dx = p.pos.x - CAMP.x, dz = p.pos.z - CAMP.z, d = Math.hypot(dx, dz) || 1;
+    p.pos.x = CAMP.x + dx / d * 1.9; p.pos.z = CAMP.z + dz / d * 1.9;
+  }
+  if (Math.hypot(p.pos.x, p.pos.z) > WORLD_R + 2) {
+    keepInWorld(p.pos, WORLD_R + 2);
+    if (!p.edgeMsg || game.time - p.edgeMsg > 6) { p.edgeMsg = game.time; toast('🌫️ 안개가 너무 짙다', '더 이상 나갈 수 없습니다'); }
+  }
+
+  // 애니메이션
+  var g = p.group;
+  g.position.copy(p.pos); g.rotation.y = p.yaw;
+  var mv = Math.hypot(p.vel.x, p.vel.z);
+  var sw = p.grounded ? Math.sin(game.time * (running ? 14 : 10)) * Math.min(1, mv / 5) * 0.8 : 0.3;
+  p.legs[0].rotation.x = sw; p.legs[1].rotation.x = -sw;
+  p.arms[0].rotation.x = -sw * 0.8;
+  if (p.swing > 0) {
+    p.swing -= dt;
+    p.arms[1].rotation.x = -2.4 + (0.3 - Math.max(0, p.swing)) / 0.3 * 2.4 - 0.2;
+  } else p.arms[1].rotation.x = sw * 0.6 - 0.2;
+  p.logPile.forEach(function (lg, i) { lg.visible = i < Math.ceil(p.logs / 2); });
+}
+
+function updateTrees(dt) {
+  var ax = camera.position.x, az = camera.position.z;
+  var bx = player.pos.x - ax, bz = player.pos.z - az, len2 = bx * bx + bz * bz;
+  TREES.forEach(function (t, i) {
+    if (t.cut) {
+      t.regrow -= dt;
+      if (t.regrow <= 0 && Math.hypot(t.x - player.pos.x, t.z - player.pos.z) > 4) { t.cut = false; t.hp = 4; setTreeShown(t, i, true); }
+      return;
+    }
+    // 카메라와 플레이어 사이를 가리는 나무는 잠깐 숨긴다
+    var hide = false;
+    if (len2 > 1e-4 && Math.abs(t.x - player.pos.x) < 14 && Math.abs(t.z - player.pos.z) < 14) {
+      var u = Math.max(0, Math.min(1, ((t.x - ax) * bx + (t.z - az) * bz) / len2));
+      hide = u < 0.93 && Math.hypot(ax + bx * u - t.x, az + bz * u - t.z) < t.r + 1.1;
+    }
+    if (hide === t.shown) setTreeShown(t, i, !hide);
+  });
+  BUSHES.forEach(function (b) {
+    if (b.ripe) return;
+    b.regrow -= dt;
+    if (b.regrow <= 0) { b.ripe = true; b.berries.visible = true; }
+  });
+}
+
+function updateFire(dt) {
+  if (FIRE.fuel > 0) {
+    FIRE.fuel = Math.max(0, FIRE.fuel - (isNight() ? 1.15 : 0.65) * dt);
+    if (FIRE.fuel === 0) toast('🔥 모닥불이 꺼졌다!', '통나무를 넣으면 다시 붙습니다 — 안전한 곳이 사라졌다');
+    else if (FIRE.fuel < 15 && !FIRE.warned) { FIRE.warned = true; toast('⚠️ 모닥불이 꺼져 간다', '통나무를 넣으세요'); }
+  }
+  if (FIRE.fuel > 25) FIRE.warned = false;
+  var f = FIRE.fuel / 100, lit = FIRE.fuel > 0;
+  FIRE.flames.forEach(function (fl, i) {
+    fl.visible = lit;
+    var fk = 0.85 + Math.sin(game.time * (9 + i * 3)) * 0.1 + Math.sin(game.time * 5.3 + i) * 0.07;
+    var s = (0.4 + f * 0.8 + FIRE.level * 0.1) * fk;
+    fl.scale.set(s, s, s);
+    fl.position.y = 0.35 + fl.userData.h * s / 2;
+  });
+  var r = safeR();
+  FIRE.light.intensity = lit ? (1.4 + f * 2.4) * (0.9 + Math.sin(game.time * 13) * 0.1) : 0;
+  FIRE.light.distance = r * 2.4 + 10;
+  FIRE.ring.visible = lit;
+  FIRE.ring.scale.setScalar(Math.max(0.01, r));
+}
+
+function updateWolves(dt) {
+  var p = player.pos, night = isNight();
+  var huntable = !inSafe(p);
+  WOLVES.forEach(function (w) {
+    if (w.dead > 0) {
+      w.dead -= dt;
+      if (w.dead <= 0) placeWolf(w);
+      return;
+    }
+    w.cool -= dt; w.flash -= dt; w.knock -= dt;
+    var dx = p.x - w.pos.x, dz = p.z - w.pos.z, d = Math.hypot(dx, dz);
+    var sight = night ? 30 : 17;
+    if (w.chase) sight += 12;                       // 한 번 쫓기 시작하면 쉽게 놓치지 않는다
+    w.chase = huntable && d < sight && w.knock <= 0;
+    var sp = 0, yaw = null;
+    if (w.chase) {
+      sp = night ? 6.3 : 5.2;
+      if (d > player.r + 1.1) yaw = stepToward(w.pos, p.x, p.z, sp, dt);
+      else yaw = Math.atan2(dx, dz);
+      if (d < player.r + 1.5 && w.cool <= 0) {
+        w.cool = 1.2;
+        hurt(night ? 14 : 10, w.pos.x, w.pos.z, 7);
+        toast('🐺 늑대에게 물렸다!', '도끼로 반격하거나(E) 모닥불로 도망치세요');
+      }
+    } else if (w.knock <= 0) {
+      if (Math.hypot(w.goal.x - w.pos.x, w.goal.z - w.pos.z) < 0.6) {
+        w.goal.set(w.home.x + (Math.random() - 0.5) * 22, 0, w.home.z + (Math.random() - 0.5) * 22);
+      }
+      sp = 1.6;
+      yaw = stepToward(w.pos, w.goal.x, w.goal.z, sp, dt);
+    }
+    pushOutOfTrees(w.pos, 0.5);
+    keepOutOfCamp(w.pos, 1.5);
+    keepInWorld(w.pos, WORLD_R);
+    if (yaw !== null) w.yaw = yaw;
+    w.group.position.copy(w.pos);
+    w.group.rotation.y = w.yaw;
+    var s = sp > 0 ? Math.sin(game.time * sp * 3) * 0.6 : 0;
+    w.legs.forEach(function (l, i) { l.rotation.x = (i === 0 || i === 3) ? s : -s; });
+    w.body.material = w.flash > 0 ? WOLF_HIT : w.fur;
+  });
+}
+
+function spawnDeer() {
+  for (var i = 0; i < 30; i++) {
+    var a = Math.random() * Math.PI * 2, r = 45 + Math.random() * 20;
+    DEER.pos.set(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
+    keepInWorld(DEER.pos, WORLD_R);
+    if (!inSafe(DEER.pos) && DEER.pos.distanceTo(player.pos) > 30) break;
+  }
+  keepOutOfCamp(DEER.pos, 2);
+  DEER.state = 'hunt'; DEER.t = 0; DEER.group.visible = true;
+}
+
+function updateDeer(dt) {
+  if (!isNight()) {
+    if (DEER.state !== 'gone') { DEER.state = 'gone'; DEER.group.visible = false; }
+    return;
+  }
+  if (DEER.state === 'gone') spawnDeer();
+  var p = player.pos;
+  var dx = p.x - DEER.pos.x, dz = p.z - DEER.pos.z, d = Math.hypot(dx, dz);
+  var sp = 0, yaw = null;
+  DEER.t -= dt;
+
+  if (FLASH.light.intensity > 0 && d < 30 && (DEER.state === 'hunt' || DEER.state === 'stalk')) {
+    var fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+    if ((-dx * fx - dz * fz) / (d || 1) > Math.cos(0.34)) {
+      DEER.state = 'stun'; DEER.t = 2.8;
+      toast('🔦 사슴이 빛에 얼어붙었다!', '지금 도망치세요');
+    }
+  }
+
+  if (DEER.state === 'stun') {
+    if (DEER.t <= 0) { DEER.state = 'flee'; DEER.t = 5; }
+    yaw = Math.atan2(dx, dz);
+  } else if (DEER.state === 'flee') {
+    sp = 8;
+    yaw = stepToward(DEER.pos, DEER.pos.x - dx, DEER.pos.z - dz, sp, dt);
+    if (DEER.t <= 0) DEER.state = 'hunt';
+  } else if (!inSafe(p)) {
+    DEER.state = 'hunt';
+    sp = Math.min(10.5, 7.2 + game.nights * 0.04);
+    yaw = stepToward(DEER.pos, p.x, p.z, sp, dt);
+    if (d < player.r + 1.3) {
+      hurt(35, DEER.pos.x, DEER.pos.z, 12);
+      toast('🦌 사슴에게 당했다!', '체력 -35');
+      DEER.state = 'flee'; DEER.t = 6;
+    }
+  } else {
+    DEER.state = 'stalk';                           // 불빛 가장자리를 맴돈다
+    var a = Math.atan2(DEER.pos.z - CAMP.z, DEER.pos.x - CAMP.x) + dt * 0.1;
+    var rr = safeR() + 7;
+    sp = 2.4;
+    stepToward(DEER.pos, CAMP.x + Math.cos(a) * rr, CAMP.z + Math.sin(a) * rr, sp, dt);
+    yaw = Math.atan2(dx, dz);                       // 늘 이쪽을 노려본다
+  }
+  keepOutOfCamp(DEER.pos, 0.8);
+  keepInWorld(DEER.pos, WORLD_R);
+
+  if (yaw !== null) DEER.yaw = yaw;
+  DEER.group.position.copy(DEER.pos);
+  DEER.group.rotation.y = DEER.yaw;
+  var s = sp > 0 ? Math.sin(game.time * sp * 1.6) * 0.5 : 0;
+  DEER.legs.forEach(function (l, i) { l.rotation.x = i ? s : -s; });
+  DEER.arms.forEach(function (a2, i) { a2.rotation.x = i ? -s * 0.7 : s * 0.7; });
+  DEER.group.rotation.z = DEER.state === 'stun' ? Math.sin(game.time * 40) * 0.03 : 0;
+  DEER.eyeLight.intensity = DEER.state === 'stun' ? 0.3 : 1.4;
+}
+
+function updateKids(dt) {
+  var p = player.pos;
+  KIDS.forEach(function (k, i) {
+    if (k.state === 'saved') return;
+    if (k.state === 'lost') {
+      k.marker.rotation.y += dt * 2;
+      k.marker.position.y = 2.3 + Math.sin(game.time * 3 + i) * 0.15;
+      if (Math.hypot(p.x - k.pos.x, p.z - k.pos.z) < 2.2) {
+        k.state = 'follow'; k.marker.visible = false;
+        toast('👶 ' + k.name + '(을)를 찾았다!', '모닥불까지 데려가세요');
+      }
+    } else {
+      var back = 1.8 + i * 0.9;
+      var tx = p.x - Math.sin(player.yaw) * back, tz = p.z - Math.cos(player.yaw) * back;
+      var d = Math.hypot(tx - k.pos.x, tz - k.pos.z);
+      var yaw = stepToward(k.pos, tx, tz, Math.min(11, 2 + d * 2.2), dt);
+      if (yaw !== null && d > 0.3) k.group.rotation.y = yaw;
+      pushOutOfTrees(k.pos, 0.35);
+      if (campDist(k.pos) < Math.max(5, safeR())) {
+        k.state = 'saved'; player.rescued++;
+        var a = player.rescued / 4 * Math.PI * 2 + 0.5;
+        k.pos.set(CAMP.x + Math.cos(a) * 3.3, 0, CAMP.z + Math.sin(a) * 3.3);
+        k.group.rotation.y = Math.atan2(CAMP.x - k.pos.x, CAMP.z - k.pos.z);
+        k.glow.visible = false;
+        player.hp = 100;
+        toast('🎉 ' + k.name + '(을)를 구했다! (' + player.rescued + ' / 4)',
+              player.rescued === 4 ? '모든 아이를 구했다!' : '체력이 가득 찼다');
+      }
+    }
+    k.group.position.copy(k.pos);
+  });
+}
+
+function updateSurvival(dt) {
+  var p = player;
+  p.hunger = Math.max(0, p.hunger - 0.34 * dt);
+  if (p.hunger <= 0) {
+    p.hp -= 1.6 * dt;
+    if (!p.starveMsg || game.time - p.starveMsg > 12) { p.starveMsg = game.time; toast('🍽️ 너무 배고프다!', '체력이 줄어듭니다 — Q 로 먹으세요'); }
+  } else if (inSafe(p.pos) && p.hunger > 25) {
+    p.hp = Math.min(100, p.hp + 2 * dt);
+  }
+  p.hurtT = Math.max(0, p.hurtT - dt);
+
+  var beamOn = (keys.KeyV || mouseBeam) && p.beam > 0;
+  if (beamOn) p.beam = Math.max(0, p.beam - 18 * dt);
+  else p.beam = Math.min(100, p.beam + 8 * dt);
+  var fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+  FLASH.light.position.set(p.pos.x + fx * 0.4, p.pos.y + 1.7, p.pos.z + fz * 0.4);
+  FLASH.target.position.set(p.pos.x + fx * 14, p.pos.y + 0.8, p.pos.z + fz * 14);
+  FLASH.light.intensity = beamOn ? 5 : 0;
+
+  // 밤/낮 전환
+  var night = isNight();
+  if (night && !game.wasNight) {
+    toast('🌙 ' + dayNo() + '번째 밤', '사슴이 깨어났다 — 모닥불 빛을 벗어나지 마세요');
+    // 밤이 거듭될수록 늑대가 늘어난다 (최대 14마리)
+    var want = Math.min(14, 5 + Math.floor(game.nights / 3));
+    while (WOLVES.length < want) makeWolf();
+  }
+  if (!night && game.wasNight) {
+    game.nights = Math.floor(game.time / CYCLE);
+    if (game.nights >= NIGHTS_GOAL) {
+      gameOver('🏆 99일 밤을 버텼다!', '숲에서 ' + NIGHTS_GOAL + '번의 밤을 모두 살아남았습니다!');
+      return;
+    }
+    toast('🌅 ' + game.nights + '번째 밤을 버텼다!', '99일 밤까지 ' + (NIGHTS_GOAL - game.nights) + '번 남았다');
+  }
+  game.wasNight = night;
+
+  if (p.hp <= 0) {
+    p.hp = 0;
+    gameOver('🌲 숲에서 쓰러졌다', game.nights + '번의 밤을 버텼습니다.');
+  }
+}
+
+/* ---- 하늘과 빛 ---- */
+var skyC = new THREE.Color();
+function updateSky() {
+  var t = game.time % CYCLE, b;
+  if (t < DAY - 10) b = 0;
+  else if (t < DAY) b = (t - (DAY - 10)) / 10;      // 해질녘 10초
+  else if (t < CYCLE - 8) b = 1;
+  else b = 1 - (t - (CYCLE - 8)) / 8;               // 새벽 8초
+  if (b < 0.5) skyC.copy(SKY_DAY).lerp(SKY_DUSK, b * 2);
+  else skyC.copy(SKY_DUSK).lerp(SKY_NIGHT, (b - 0.5) * 2);
+  scene.background.copy(skyC);
+  scene.fog.color.copy(skyC);
+  scene.fog.near = 30 - b * 18;
+  scene.fog.far = 95 - b * 55;
+  sun.intensity = 0.9 * (1 - b) + 0.05;
+  hemi.intensity = 0.6 - b * 0.46;
+  var px = player.pos.x, pz = player.pos.z;
+  sun.position.set(px + 30, 50, pz + 20);
+  sun.target.position.set(px, 0, pz);
+  aura.position.set(px, 2.5, pz);
+  aura.intensity = b * 0.5;
+}
+
+/* ---- 카메라 ---- */
+function updateCamera() {
+  var p = player.pos, dist = 7.5;
+  var cp = Math.cos(camPitch);
+  var x = p.x - Math.sin(camYaw) * cp * dist, z = p.z - Math.cos(camYaw) * cp * dist;
+  var y = Math.max(0.6, p.y + 1.8 + Math.sin(camPitch) * dist);
+  camera.position.set(x, y, z);
+  camera.lookAt(p.x, p.y + 1.7, p.z);
+}
+
+/* ---- HUD ---- */
+function bar(id, v, color) {
+  var el = document.getElementById(id);
+  el.style.width = Math.max(0, Math.min(100, v)).toFixed(1) + '%';
+  if (color) el.style.background = color;
+}
+function prompt() {
+  var p = player.pos;
+  if (campDist(p) < 4.2 && (player.logs > 0 || player.raw > 0)) return player.logs > 0 ? '🔥 E — 통나무 넣기' : '🍖 E — 고기 굽기';
+  if (nearestWolf(2.9)) return '🪓 E — 늑대 치기';
+  if (nearestTree(1.9) >= 0) return player.logs >= LOG_MAX ? '🪵 통나무가 가득 찼다' : '🪓 E — 나무 베기';
+  if (nearestBush(2.4)) return '🍒 E — 열매 따기';
+  return '';
+}
+function updateHUD() {
+  var t = game.time % CYCLE, night = isNight();
+  document.getElementById('dayName').textContent = night ? '🌙 ' + dayNo() + '번째 밤' : '☀️ ' + dayNo() + '일째 낮';
+  var left = night ? CYCLE - t : DAY - t;
+  document.getElementById('dayLeft').textContent =
+    (night ? '아침까지 ' : '밤까지 ') + fmt(left) + ' · 버틴 밤 ' + game.nights + ' / ' + NIGHTS_GOAL;
+  bar('clockIn', night ? (t - DAY) / NIGHT * 100 : t / DAY * 100, night ? '#8fa8e0' : '#ffd070');
+
+  var p = player;
+  bar('hpIn', p.hp, p.hp < 30 ? '#ff3a3a' : '#e94a5a');
+  bar('hungerIn', p.hunger);
+  bar('stamIn', p.stamina);
+  bar('beamIn', p.beam);
+  bar('fuelIn', FIRE.fuel, FIRE.fuel < 20 ? '#ff4a1a' : '#ff8a2a');
+  document.getElementById('hpVal').textContent = Math.ceil(p.hp);
+  document.getElementById('hungerVal').textContent = Math.ceil(p.hunger);
+  document.getElementById('fuelVal').textContent = FIRE.fuel > 0 ? Math.ceil(FIRE.fuel) + '% · Lv' + FIRE.level : '꺼짐!';
+  document.getElementById('invLogs').textContent = p.logs + ' / ' + LOG_MAX;
+  document.getElementById('invBerries').textContent = p.berries;
+  document.getElementById('invRaw').textContent = p.raw;
+  document.getElementById('invCooked').textContent = p.cooked;
+  document.getElementById('invKids').textContent = p.rescued + ' / 4';
+
+  var dx = CAMP.x - p.pos.x, dz = CAMP.z - p.pos.z;
+  var rel = Math.atan2(dx, dz) - camYaw;
+  document.getElementById('arrow').style.transform = 'rotate(' + (-rel) + 'rad)';
+  document.getElementById('campDist').textContent = inSafe(p.pos) ? '🔥 불빛 안 (안전)' : '모닥불 ' + Math.round(campDist(p.pos)) + 'm';
+  var th = document.getElementById('threat');
+  if (DEER.state !== 'gone') {
+    th.textContent = '🦌 사슴 ' + Math.round(DEER.pos.distanceTo(p.pos)) + 'm';
+    th.style.color = DEER.state === 'hunt' ? '#ff7a6a' : '#c8b0a0';
+  } else th.textContent = '';
+
+  var pr = prompt(), pe = document.getElementById('prompt');
+  pe.style.display = pr ? 'block' : 'none';
+  if (pr) pe.textContent = pr;
+  document.getElementById('hurt').style.opacity = (p.hurtT * 1.6 + (p.hp < 25 ? 0.25 + Math.sin(game.time * 5) * 0.1 : 0)).toFixed(2);
+}
+
+/* ------------------------------------------------------------------ *
+ *  루프
+ * ------------------------------------------------------------------ */
+
+var prev = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  var dt = Math.min(0.05, (now - prev) / 1000);
+  prev = now;
+  if (game.running) {
+    game.time += dt;
+    actCool -= dt;
+    updatePlayer(dt);
+    updateTrees(dt);
+    updateFire(dt);
+    updateWolves(dt);
+    updateDeer(dt);
+    updateKids(dt);
+    updateSurvival(dt);
+    updateHUD();
+  } else {
+    camYaw += dt * 0.05;                           // 시작 화면 뒤로 천천히 모닥불을 돈다
+    updateFire(0);
+  }
+  updateChips(dt);
+  updateSky();
+  updateCamera();
+  renderer.render(scene, camera);
+}
+
+for (var i = 0; i < 5; i++) makeWolf();
+document.getElementById('startBtn').onclick = restart;
+document.getElementById('againBtn').onclick = restart;
+
+window.SURVIVAL = {
+  game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, WOLVES:WOLVES, DEER:DEER, KIDS:KIDS,
+  CAMP:CAMP, keys:keys, action:action, eat:eat, inSafe:inSafe, restart:restart,
+  setCamYaw:function (y) { camYaw = y; }, CYCLE:CYCLE, DAY:DAY
+};
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
