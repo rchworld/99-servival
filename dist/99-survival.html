@@ -47,6 +47,8 @@
   #hurt { position:fixed; inset:0; z-index:8; pointer-events:none; opacity:0;
           box-shadow:inset 0 0 160px 40px rgba(200,0,0,.8); }
 
+  #flashFx { position:fixed; inset:0; z-index:7; pointer-events:none; opacity:0; background:#dfe8ff; }
+
   #toast {
     position:fixed; top:17%; left:50%; transform:translateX(-50%) scale(.9);
     z-index:12; font-size:27px; font-weight:800; text-align:center;
@@ -142,6 +144,7 @@
 <div id="prompt"></div>
 <div id="cross"></div>
 <div id="hurt"></div>
+<div id="flashFx"></div>
 <div id="toast"></div>
 
 <div id="craft" class="hide">
@@ -169,6 +172,7 @@
       <div class="key"><b>F</b> 총 쏘기</div>
       <div class="key"><b>T</b> 곰덫 설치</div>
       <div class="key"><b>V</b>/<b>우클릭</b> 손전등</div>
+      <div class="key"><b>B</b> 비 내리기/그치기</div>
     </div>
     <ul class="rules">
       <li>🔥 <b>모닥불</b>에 통나무·석탄·연료통을 넣어 불을 지키세요. 불빛 안은 안전하고, 많이 넣을수록 레벨이 올라 넓어집니다.</li>
@@ -177,6 +181,7 @@
       <li>🎁 숲 곳곳의 <b>보물상자</b>를 열면 아이템이 나옵니다. 멀리 있을수록 좋은 것이 들어 있습니다.</li>
       <li>👥 <b>팀원 4명</b>(AI)이 나무를 베고, 사냥하고, 고철을 모아 캠프 창고에 가져옵니다. 밤에는 모닥불 곁으로 돌아옵니다.</li>
       <li>🦌 밤에는 <b>사슴 괴물</b>이 사냥을 나옵니다. 손전등으로 정면을 비추거나 총을 쏘면 얼어붙습니다. 🐺 늑대와 🐻 곰은 밤마다 늘어납니다.</li>
+      <li>🌧️ 가끔 <b>비</b>가 내리고, 세게 오면 <b>천둥번개</b>가 칩니다. 빗속에서는 모닥불이 빨리 타니 통나무를 넉넉히 넣으세요. <b>B</b> 로 직접 비를 내릴 수도 있습니다.</li>
       <li>👶 숲 가장자리의 <b>길 잃은 아이 4명</b>을 찾아 모닥불까지 데려오세요.</li>
     </ul>
     <button id="startBtn">숲으로 들어가기</button>
@@ -324,10 +329,13 @@ function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
  *  땅
  * ------------------------------------------------------------------ */
 
+var GROUND_MATS = [];
 (function buildGround() {
   var ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 60, 64), mat(0x3f5a2e, 1));
+  GROUND_MATS.push(ground.material);
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
   var clearing = new THREE.Mesh(new THREE.CircleGeometry(16, 40), mat(0x6b5a40, 1));
+  GROUND_MATS.push(clearing.material);
   clearing.rotation.x = -Math.PI / 2; clearing.position.y = 0.01; clearing.receiveShadow = true; scene.add(clearing);
   var grassGeo = new THREE.ConeGeometry(0.12, 0.5, 4);
   grassGeo.translate(0, 0.25, 0);
@@ -1031,6 +1039,7 @@ addEventListener('keydown', function (e) {
   if (e.code === 'KeyH') heal();
   if (e.code === 'KeyF') shoot();
   if (e.code === 'KeyT') placeTrap();
+  if (e.code === 'KeyB') toggleRain();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1109,6 +1118,7 @@ function restart() {
     k.group.position.copy(k.pos);
   });
   DEER.state = 'gone'; DEER.group.visible = false;
+  RAIN.on = false; RAIN.amount = 0; RAIN.next = 25; RAIN.flash = 0; RAIN.forced = false;
   camYaw = Math.PI; camPitch = 0.32;
   document.getElementById('start').classList.add('hide');
   document.getElementById('over').classList.add('hide');
@@ -1686,7 +1696,7 @@ function updateTrees(dt) {
 
 function updateFire(dt) {
   if (FIRE.fuel > 0) {
-    FIRE.fuel = Math.max(0, FIRE.fuel - (isNight() ? 1.15 : 0.65) * (gear.bigFire ? 0.7 : 1) * dt);
+    FIRE.fuel = Math.max(0, FIRE.fuel - (isNight() ? 1.15 : 0.65) * (gear.bigFire ? 0.7 : 1) * rainFuelFactor() * dt);
     if (FIRE.fuel === 0) toast('🔥 모닥불이 꺼졌다!', '통나무를 넣으면 다시 붙습니다 — 안전한 곳이 사라졌다');
     else if (FIRE.fuel < 15 && !FIRE.warned) { FIRE.warned = true; toast('⚠️ 모닥불이 꺼져 간다', '통나무·석탄·연료통을 넣으세요'); }
   }
@@ -1735,7 +1745,7 @@ function updateBeasts(dt) {
     }
 
     // 가장 가까운 사람을 노린다 (불빛 안은 못 들어간다)
-    var sight = (night ? w.T.sight[1] : w.T.sight[0]);
+    var sight = (night ? w.T.sight[1] : w.T.sight[0]) * (1 - RAIN.amount * 0.2);
     var tgt = null, td = 1e9;
     hs.forEach(function (h) {
       if (!h.alive || inSafe(h.pos)) return;
@@ -1928,8 +1938,114 @@ function updateSurvival(dt) {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ *  날씨 — 비. 가끔 쏟아지고, 세게 오면 천둥번개가 친다.
+ *  비가 오면 모닥불이 빨리 타고, 하늘이 어두워지고, 땅이 젖는다.
+ * ------------------------------------------------------------------ */
+
+var RAIN = { on:false, heavy:false, amount:0, next:25, left:0, bolt:0, flash:0, forced:false };
+var DROPS = 2600, RAIN_BOX = { w:70, h:34 };
+var rainPos = new Float32Array(DROPS * 6), rainSpeed = new Float32Array(DROPS);
+var rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+var rainMat = new THREE.LineBasicMaterial({ color:0xa8bcd8, transparent:true, opacity:0, depthWrite:false });
+var rainLines = new THREE.LineSegments(rainGeo, rainMat);
+rainLines.frustumCulled = false;
+scene.add(rainLines);
+var WIND = { x:1.6, z:0.8 };
+var wetColors = GROUND_MATS.map(function (m) { return m.color.clone(); });
+var bolt = new THREE.PointLight(0xdfe8ff, 0, 400, 0);
+scene.add(bolt);
+
+(function seedRain() {
+  for (var i = 0; i < DROPS; i++) {
+    rainSpeed[i] = 22 + Math.random() * 10;
+    var x = (Math.random() - 0.5) * RAIN_BOX.w, y = Math.random() * RAIN_BOX.h, z = (Math.random() - 0.5) * RAIN_BOX.w;
+    setDrop(i, x, y, z);
+  }
+})();
+function setDrop(i, x, y, z) {
+  var k = i * 6, len = 0.9 / 26;                    // 빗줄기 길이 = 떨어지는 속도 방향으로 조금
+  rainPos[k] = x; rainPos[k + 1] = y; rainPos[k + 2] = z;
+  rainPos[k + 3] = x - WIND.x * len * 4; rainPos[k + 4] = y + 0.9; rainPos[k + 5] = z - WIND.z * len * 4;
+}
+
+function startRain(heavy, forced) {
+  RAIN.on = true; RAIN.heavy = heavy; RAIN.forced = !!forced;
+  RAIN.left = forced ? 1e9 : 35 + Math.random() * 50;
+  RAIN.bolt = 4 + Math.random() * 6;
+  toast(heavy ? '⛈️ 폭풍우가 몰아친다!' : '🌧️ 비가 내리기 시작했다',
+        '모닥불이 ' + (heavy ? '훨씬 ' : '') + '빨리 탑니다 — 통나무를 넉넉히 넣으세요');
+}
+function stopRain(msg) {
+  RAIN.on = false; RAIN.forced = false;
+  RAIN.next = 60 + Math.random() * 100;
+  if (msg) toast('🌤️ 비가 그쳤다', '');
+}
+function toggleRain() {                              // B 키 — 직접 비를 내리거나 그치게 한다
+  if (RAIN.on) stopRain(true);
+  else startRain(Math.random() < 0.35, true);
+}
+function rainFuelFactor() {                          // 모닥불 보호막이 있으면 비를 덜 맞는다
+  return 1 + RAIN.amount * (RAIN.heavy ? 0.9 : 0.55) * (gear.bigFire ? 0.35 : 1);
+}
+
+function updateWeather(dt) {
+  if (game.running) {
+    if (RAIN.on) {
+      RAIN.left -= dt;
+      if (RAIN.left <= 0) stopRain(true);
+    } else {
+      RAIN.next -= dt;
+      if (RAIN.next <= 0) startRain(Math.random() < (isNight() ? 0.45 : 0.25));
+    }
+  }
+  RAIN.amount += ((RAIN.on ? 1 : 0) - RAIN.amount) * Math.min(1, dt * 0.5);
+  var a = RAIN.amount;
+
+  // 빗줄기 — 플레이어 주변 상자 안에서 떨어지고, 바닥에 닿으면 위로 돌아간다
+  rainLines.visible = a > 0.02;
+  if (rainLines.visible) {
+    var cx = player.pos.x, cz = player.pos.z, hw = RAIN_BOX.w / 2;
+    var active = Math.floor(DROPS * Math.min(1, a * (RAIN.heavy ? 1 : 0.6)));
+    for (var i = 0; i < DROPS; i++) {
+      var k = i * 6;
+      if (i >= active) { rainPos[k + 1] = -50; rainPos[k + 4] = -50; continue; }
+      var sp = rainSpeed[i] * dt;
+      var x = rainPos[k] + WIND.x * dt, y = rainPos[k + 1] - sp, z = rainPos[k + 2] + WIND.z * dt;
+      if (y < 0 || y > RAIN_BOX.h + 5) { y += RAIN_BOX.h; if (y < 0) y = RAIN_BOX.h * Math.random(); }
+      if (x < cx - hw) x += RAIN_BOX.w; else if (x > cx + hw) x -= RAIN_BOX.w;
+      if (z < cz - hw) z += RAIN_BOX.w; else if (z > cz + hw) z -= RAIN_BOX.w;
+      setDrop(i, x, y, z);
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+    rainMat.opacity = a * (isNight() ? 0.35 : 0.55);
+  }
+
+  // 땅이 젖어 어둡고 번들거린다
+  GROUND_MATS.forEach(function (m, i) {
+    m.color.copy(wetColors[i]).multiplyScalar(1 - a * 0.35);
+    m.roughness = 1 - a * 0.45;
+  });
+
+  // 천둥번개
+  RAIN.flash = Math.max(0, RAIN.flash - dt * 3.5);
+  if (game.running && RAIN.on && RAIN.heavy && a > 0.6) {
+    RAIN.bolt -= dt;
+    if (RAIN.bolt <= 0) {
+      RAIN.bolt = 6 + Math.random() * 12;
+      RAIN.flash = 1;
+      bolt.position.set(player.pos.x + (Math.random() - 0.5) * 60, 60, player.pos.z + (Math.random() - 0.5) * 60);
+    }
+  }
+  var f = RAIN.flash > 0.7 || (RAIN.flash > 0.3 && RAIN.flash < 0.45) ? RAIN.flash : RAIN.flash * 0.3;
+  bolt.intensity = f * 2.2;
+  document.getElementById('flashFx').style.opacity = (f * 0.35).toFixed(3);
+}
+
 /* ---- 하늘과 빛 ---- */
 var skyC = new THREE.Color();
+var RAIN_SKY = new THREE.Color(0x4e5866);
 function updateSky() {
   var t = game.time % CYCLE, b;
   if (t < DAY - 10) b = 0;
@@ -1938,12 +2054,14 @@ function updateSky() {
   else b = 1 - (t - (CYCLE - 8)) / 8;
   if (b < 0.5) skyC.copy(SKY_DAY).lerp(SKY_DUSK, b * 2);
   else skyC.copy(SKY_DUSK).lerp(SKY_NIGHT, (b - 0.5) * 2);
+  var ra = RAIN.amount;
+  skyC.lerp(RAIN_SKY, ra * (0.75 - b * 0.45));
   scene.background.copy(skyC);
   scene.fog.color.copy(skyC);
-  scene.fog.near = 30 - b * 18;
-  scene.fog.far = 95 - b * 55;
-  sun.intensity = 0.9 * (1 - b) + 0.05;
-  hemi.intensity = 0.6 - b * 0.46;
+  scene.fog.near = (30 - b * 18) * (1 - ra * 0.45);
+  scene.fog.far = (95 - b * 55) * (1 - ra * (RAIN.heavy ? 0.45 : 0.3));
+  sun.intensity = (0.9 * (1 - b) + 0.05) * (1 - ra * 0.65);
+  hemi.intensity = (0.6 - b * 0.46) * (1 - ra * 0.3);
   var px = player.pos.x, pz = player.pos.z;
   sun.position.set(px + 30, 50, pz + 20);
   sun.target.position.set(px, 0, pz);
@@ -1992,7 +2110,8 @@ function updateHUD(dt) {
   document.getElementById('dayName').textContent = night ? '🌙 ' + dayNo() + '번째 밤' : '☀️ ' + dayNo() + '일째 낮';
   var left = night ? CYCLE - t : DAY - t;
   document.getElementById('dayLeft').textContent =
-    (night ? '아침까지 ' : '밤까지 ') + fmt(left) + ' · 버틴 밤 ' + game.nights + ' / ' + NIGHTS_GOAL;
+    (night ? '아침까지 ' : '밤까지 ') + fmt(left) + ' · 버틴 밤 ' + game.nights + ' / ' + NIGHTS_GOAL +
+    (RAIN.on ? (RAIN.heavy ? ' · ⛈️ 폭풍우' : ' · 🌧️ 비') : '');
   bar('clockIn', night ? (t - DAY) / NIGHT * 100 : t / DAY * 100, night ? '#8fa8e0' : '#ffd070');
 
   var p = player;
@@ -2077,6 +2196,7 @@ function loop(now) {
     updateFire(0);
   }
   updateChips(dt);
+  updateWeather(dt);
   updateSky();
   updateCamera();
   renderer.render(scene, camera);
@@ -2090,7 +2210,7 @@ document.getElementById('againBtn').onclick = restart;
 window.SURVIVAL = {
   game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, BEASTS:BEASTS, DEER:DEER, KIDS:KIDS,
   BOTS:BOTS, PICKUPS:PICKUPS, CHESTS:CHESTS, TRAPS:TRAPS, RECIPES:RECIPES, BENCH:BENCH, GRINDER:GRINDER,
-  STORE_POS:STORE_POS, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
+  STORE_POS:STORE_POS, RAIN:RAIN, toggleRain:toggleRain, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
   action:action, eat:eat, heal:heal, shoot:shoot, placeTrap:placeTrap, inSafe:inSafe, restart:restart,
   isCraftOpen:function () { return craftOpen; },
   setCamYaw:function (y) { camYaw = y; }, CYCLE:CYCLE, DAY:DAY
