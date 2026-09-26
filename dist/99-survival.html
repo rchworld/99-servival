@@ -917,7 +917,7 @@ function campSlot(b) {
 
 var BEAST_TYPES = {
   wolf: { name:'늑대', hp:3,  dmg:[10, 14], speed:[5.2, 6.3], sight:[17, 30], meat:2, pelt:1, scale:1,   fur:0x5d5b58, dark:0x3c3a38, respawn:60 },
-  bear: { name:'곰',   hp:10, dmg:[22, 28], speed:[4.3, 5.3], sight:[13, 22], meat:5, pelt:2, scale:1.75, fur:0x4a3222, dark:0x2e1e14, respawn:110 },
+  bear: { name:'곰',   hp:10, dmg:[15, 20], speed:[3.8, 4.6], sight:[10, 17], meat:5, pelt:2, scale:1.75, fur:0x4a3222, dark:0x2e1e14, respawn:110 },
   // 호랑이와 구렁이 — 곰보다 2배 아프게 물고, 모닥불 빛 안에도 들어온다. 자기 영역에서 너무 멀어지면 돌아간다.
   tiger:   { name:'호랑이', icon:'🐯', hp:20, dmg:[44, 56], speed:[6.0, 7.0], sight:[18, 28], meat:6, pelt:3, scale:1.5, fur:0xe07a20, dark:0x1a1410, respawn:150, camp:true, leash:60, far:true },
   serpent: { name:'구렁이', icon:'🐍', hp:16, dmg:[44, 56], speed:[4.4, 5.2], sight:[14, 22], meat:4, pelt:1, scale:1,   fur:0x3e4a22, dark:0xc8b848, respawn:130, camp:true, leash:50, far:true }
@@ -1528,7 +1528,7 @@ scene.add(BOOM_LIGHT);
 
 function resetDungeons() {
   DUNGEONS.forEach(function (D) {
-    D.alarm = false; D.cleared = false;
+    D.alarm = false; D.cleared = false; D.woke = false;
     D.door.hp = 3; D.door.broken = false; D.door.group.visible = true; D.door.pieces.visible = false;
     D.bears.forEach(function (w, k) {
       w.hp = w.T.hp; w.dead = 0; w.sleep = true; w.fly = null; w.knock = 0; w.cool = 0; w.y = 0;
@@ -1671,7 +1671,6 @@ function explode(pos, dungeonIdx) {
   });
   if (dungeonIdx >= 0) {
     var D = DUNGEONS[dungeonIdx];
-    D.alarm = true;                                  // 쾅! 남은 곰들이 모두 깬다
     if (Math.hypot(D.door.x - pos.x, D.door.z - pos.z) < 6.5) breakDoor(D, '💥 쾅!');
   } else if (DEER.state !== 'gone' && DEER.pos.distanceTo(pos) < 9.5) stunDeer(5, '💥 폭발에 휘말렸다');
   humans().forEach(function (h) {
@@ -1706,8 +1705,9 @@ function updateDungeon(dt) {
     }
     var d = Math.hypot(p.x - w.pos.x, p.z - w.pos.z);
     if (w.sleep) {
-      if (d < 9 || D.alarm || w.hp < w.T.hp) {
-        w.sleep = false; w.group.rotation.z = 0;
+      if (d < 6 || w.hp < w.T.hp) {
+        w.sleep = false; w.group.rotation.z = 0; w.yawn = 1.2;   // 깨어나서 잠깐 하품
+        w.cool = Math.max(w.cool, 1.2);
         if (!D.woke) { D.woke = true; toast('🐻 곰들이 깨어났다!', '조심하세요'); }
       } else {
         w.group.rotation.z = 0.9; w.group.position.set(w.pos.x, 0.15 + Math.sin(game.time * 1.5 + idx) * 0.03, w.pos.z);
@@ -1715,16 +1715,28 @@ function updateDungeon(dt) {
       }
     }
     // 깨어난 곰 옆의 곰도 깬다
-    D.bears.forEach(function (o) { if (o.sleep && o.dead <= 0 && Math.hypot(o.pos.x - w.pos.x, o.pos.z - w.pos.z) < 7) o.sleep = false; });
+    D.bears.forEach(function (o) { if (o.sleep && o.dead <= 0 && Math.hypot(o.pos.x - w.pos.x, o.pos.z - w.pos.z) < 3.5 && Math.random() < dt * 0.5) { o.sleep = false; o.yawn = 1.2; } });
     var sp = 0, yaw = null;
-    if (w.knock <= 0 && player.alive) {
-      sp = 4.7;
+    w.yawn = (w.yawn || 0) - dt;
+    // 멀리 도망치면 쫓기를 그만두고 제자리로 돌아가 다시 잠든다
+    if (d > 15) {
+      w.giveUp = (w.giveUp || 0) + dt;
+      if (w.giveUp > 2.5) {
+        sp = 2.2;
+        yaw = stepToward(w.pos, w.home.x, w.home.z, sp, dt);
+        if (Math.hypot(w.pos.x - w.home.x, w.pos.z - w.home.z) < 0.6) { w.sleep = true; w.giveUp = 0; }
+      }
+    } else w.giveUp = 0;
+    if (w.giveUp > 2.5) {
+      // 돌아가는 중
+    } else if (w.knock <= 0 && player.alive && w.yawn <= 0) {
+      sp = 3.8;
       var hitR = player.r + 1.0 * w.T.scale + 0.2;
       if (d > hitR - 0.3) yaw = stepToward(w.pos, p.x, p.z, sp, dt);
       else yaw = Math.atan2(p.x - w.pos.x, p.z - w.pos.z);
       if (d < hitR + 0.3 && w.cool <= 0) {
-        w.cool = 1.6;
-        hurtHuman(player, w.T.dmg[0], w.pos.x, w.pos.z, 9);
+        w.cool = 2.4;
+        hurtHuman(player, w.T.dmg[0], w.pos.x, w.pos.z, 7);
         toast('🐻 곰에게 당했다!', '푸른 검으로 맞서거나 다이너마이트(Z)를 던지세요');
       }
     }
