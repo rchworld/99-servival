@@ -1003,6 +1003,7 @@ function placeBeast(w) {
   }
   w.pos.copy(w.home); w.goal.copy(w.home);
   w.hp = w.T.hp; w.dead = 0; w.knock = 0; w.trapped = 0; w.target = null; w.fly = null; w.y = 0; w.group.visible = true;
+  if (w.bar) w.bar.visible = false;
   if (w.segs) {
     w.segGroup.visible = true;
     w.segs.forEach(function (sg, i) { sg.position.set(w.pos.x - i * 0.5, 0.35, w.pos.z); });
@@ -1011,10 +1012,29 @@ function placeBeast(w) {
 
 function beastCount(type) { return BEASTS.filter(function (b) { return b.type === type; }).length; }
 
+// 맞은 짐승 머리 위에 뜨는 체력 바
+function drawBeastBar(w) {
+  if (!w.bar) {
+    var c = document.createElement('canvas'); c.width = 128; c.height = 20;
+    w.bar = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthTest:false }));
+    w.bar.userData.c = c;
+    w.bar.scale.set(1.6 / w.T.scale, 0.25 / w.T.scale, 1);
+    w.bar.position.y = 2.0;
+    w.group.add(w.bar);
+  }
+  var x = w.bar.userData.c.getContext('2d'), f = Math.max(0, w.hp) / w.T.hp;
+  x.clearRect(0, 0, 128, 20);
+  x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(0, 0, 128, 20);
+  x.fillStyle = f > 0.5 ? '#5ad07a' : (f > 0.25 ? '#f0c040' : '#ff4a3a'); x.fillRect(3, 3, 122 * f, 14);
+  w.bar.material.map.needsUpdate = true;
+  w.bar.visible = w.hp > 0 && w.hp < w.T.hp;
+}
+
 // 짐승을 때린다. 쓰러뜨리면 true
 function hitBeast(w, dmg, fromX, fromZ, byPlayer) {
   var dx = w.pos.x - fromX, dz = w.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
-  w.hp -= dmg; w.flash = 0.25; w.knock = 0.5;
+  w.hp -= dmg; w.flash = 0.25; w.knock = 0.5; w.hurtWake = true;
+  drawBeastBar(w);
   var push = { bear:0.8, tiger:0.7, serpent:0.6 }[w.type] || 2.2;
   w.pos.x += dx / d * push; w.pos.z += dz / d * push;
   burst(w.pos.x, 1.0, w.pos.z, 0x9a2020, 7);
@@ -1532,6 +1552,7 @@ function resetDungeons() {
     D.door.hp = 3; D.door.broken = false; D.door.group.visible = true; D.door.pieces.visible = false;
     D.bears.forEach(function (w, k) {
       w.hp = w.T.hp; w.dead = 0; w.sleep = true; w.fly = null; w.knock = 0; w.cool = 0; w.y = 0;
+      w.hurtWake = false; w.trapped = 0; w.giveUp = 0; if (w.bar) w.bar.visible = false;
       w.pos.set(D.x - 8 + (k % 4) * 5.3 + (k * 7 % 3) * 0.6, 0, D.z + 17 + Math.floor(k / 4) * 9 + (k % 3) * 1.2);
       w.home.copy(w.pos); w.yaw = k * 1.3;
       w.group.visible = true; w.group.rotation.set(0, w.yaw, 0.9); w.group.position.copy(w.pos);
@@ -1700,12 +1721,32 @@ function updateDungeon(dt) {
       var k = Math.min(1, w.fly.k);
       w.pos.x = w.fly.fx + (w.fly.tx - w.fly.fx) * k; w.pos.z = w.fly.fz + (w.fly.tz - w.fly.fz) * k;
       w.group.position.set(w.pos.x, Math.sin(Math.PI * k) * 4, w.pos.z); w.group.rotation.x = k * 12;
-      if (k >= 1) { w.fly = null; w.group.rotation.x = 0; w.knock = 2.5; if (hitBeast(w, 3, w.pos.x, w.pos.z, true)) return; }
+      if (k >= 1) {
+        w.fly = null; w.group.rotation.x = 0; w.knock = 2.5;
+        if (hitBeast(w, 3, w.pos.x, w.pos.z, true)) return;
+        // 방귀 냄새에 기절해 그 자리에서 잠든다 — 가까이 가기 전에는 깨지 않는다
+        w.sleep = true; w.hurtWake = false; w.giveUp = 0; w.home.copy(w.pos);
+      }
       return;
+    }
+    // 곰덫
+    if (w.trapped > 0) {
+      w.trapped -= dt;
+      w.group.position.copy(w.pos); w.group.rotation.set(0, w.yaw, 0);
+      w.body.material = w.flash > 0 ? HIT_MAT : w.fur;
+      return;
+    }
+    for (var ti = 0; ti < TRAPS.length; ti++) {
+      var tr = TRAPS[ti];
+      if (tr.armed && Math.hypot(tr.x - w.pos.x, tr.z - w.pos.z) < 0.9 * w.T.scale) {
+        setTrapArmed(tr, false); w.trapped = 7; w.sleep = false; w.pos.set(tr.x, 0, tr.z);
+        if (!hitBeast(w, 3, tr.x, tr.z, true)) toast('🪤 곰이 덫에 걸렸다!', '7초 동안 움직이지 못한다');
+        return;
+      }
     }
     var d = Math.hypot(p.x - w.pos.x, p.z - w.pos.z);
     if (w.sleep) {
-      if (d < 6 || w.hp < w.T.hp) {
+      if (d < 6 || w.hurtWake) {
         w.sleep = false; w.group.rotation.z = 0; w.yawn = 1.2;   // 깨어나서 잠깐 하품
         w.cool = Math.max(w.cool, 1.2);
         if (!D.woke) { D.woke = true; toast('🐻 곰들이 깨어났다!', '조심하세요'); }
@@ -1724,7 +1765,7 @@ function updateDungeon(dt) {
       if (w.giveUp > 2.5) {
         sp = 2.2;
         yaw = stepToward(w.pos, w.home.x, w.home.z, sp, dt);
-        if (Math.hypot(w.pos.x - w.home.x, w.pos.z - w.home.z) < 0.6) { w.sleep = true; w.giveUp = 0; }
+        if (Math.hypot(w.pos.x - w.home.x, w.pos.z - w.home.z) < 0.6) { w.sleep = true; w.giveUp = 0; w.hurtWake = false; }
       }
     } else w.giveUp = 0;
     if (w.giveUp > 2.5) {
