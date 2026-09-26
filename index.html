@@ -762,6 +762,11 @@ function openChest(c) {
       var name = giveGear(e[0].slice(5));
       if (name) { got.push('✨' + name); continue; }
       giveItem('sheet', 2, c); got.push(ITEM.sheet.icon + '철판 2');
+    } else if (e[0] === 'ammo' && !gear.revolver) {          // 탄약만 있으면 쏠 수 없으니 리볼버도 같이 든다
+      gear.revolver = true; inv.ammo += e[1]; got.push('✨리볼버 + 탄약 ' + e[1]);
+    } else if (e[0] === 'rammo' && !gear.rifle) {            // 소총이 없으면 리볼버 탄약으로
+      if (!gear.revolver) { gear.revolver = true; got.push('✨리볼버'); }
+      inv.ammo += 6; got.push('•리볼버 탄약 6');
     } else {
       giveItem(e[0], e[1], c); got.push(ITEM[e[0]].icon + ITEM[e[0]].name + (e[1] > 1 ? ' ' + e[1] : ''));
     }
@@ -2106,7 +2111,7 @@ var RECIPES = [
   { tier:1, name:'붕대 ×2',       desc:'H 로 사용 — 체력 +30',               cost:{ pelt:1 },          make:function () { inv.bandage += 2; } },
   { tier:1, name:'가죽 갑옷',      desc:'받는 피해 -25%',                    cost:{ pelt:4 },          ok:function () { return gear.armor < 1; }, make:function () { gear.armor = 1; } },
   { tier:1, name:'좋은 자루',      desc:'20개까지 든다',                     cost:{ pelt:2, scrap:4 }, ok:function () { return gear.sack < 1; }, make:function () { gear.sack = 1; } },
-  { tier:1, name:'리볼버 탄약 ×6', desc:'F 로 쏜다',                         cost:{ scrap:4 },         make:function () { inv.ammo += 6; } },
+  { tier:1, name:'리볼버 탄약 ×6', desc:'F 로 쏜다',                         cost:{ scrap:4 },         need:function () { return gear.revolver ? '' : '리볼버가 있어야 쓸 수 있다 (2단계에서 제작)'; }, make:function () { inv.ammo += 6; } },
   { tier:1, name:'제작대 2단계',   desc:'더 좋은 물건을 만들 수 있다',          cost:{ log:10, scrap:20 }, ok:function () { return BENCH.tier < 2; }, make:function () { setBenchTier(2); } },
   { tier:2, name:'튼튼한 도끼',    desc:'나무 2.2배 · 짐승 피해 2',            cost:{ log:5, scrap:15 }, ok:function () { return gear.axe < 2; }, make:function () { gear.axe = 2; } },
   { tier:2, name:'강한 손전등',    desc:'더 멀리·넓게, 사슴을 오래 얼린다',       cost:{ scrap:14 },        ok:function () { return gear.light < 1; }, make:function () { gear.light = 1; } },
@@ -2117,7 +2122,7 @@ var RECIPES = [
   { tier:2, name:'제작대 3단계',   desc:'최고급 물건이 열린다',                cost:{ log:20, scrap:35 }, ok:function () { return BENCH.tier < 3; }, make:function () { setBenchTier(3); } },
   { tier:3, name:'전기톱',        desc:'나무를 한 번에 · 짐승 피해 3',          cost:{ scrap:35, fuel:1 }, ok:function () { return gear.axe < 3; }, make:function () { gear.axe = 3; } },
   { tier:3, name:'소총',          desc:'F 로 쏜다 (피해 6) · 탄약 5발',        cost:{ scrap:35 },        ok:function () { return !gear.rifle; }, make:function () { gear.rifle = true; inv.rammo += 5; } },
-  { tier:3, name:'소총 탄약 ×5',   desc:'',                                cost:{ scrap:6 },         make:function () { inv.rammo += 5; } },
+  { tier:3, name:'소총 탄약 ×5',   desc:'F 로 쏜다',                         cost:{ scrap:6 },         need:function () { return gear.rifle ? '' : '소총이 있어야 쓸 수 있다'; }, make:function () { inv.rammo += 5; } },
   { tier:3, name:'모닥불 보호막',   desc:'안전 범위 +4m · 연료가 30% 덜 탄다',     cost:{ log:15, scrap:25 }, ok:function () { return !gear.bigFire; }, make:function () { gear.bigFire = true; } }
 ];
 var MAT_NAME = { log:'🪵통나무', scrap:'⚙️고철', pelt:'🟫가죽', fuel:'⛽연료통' };
@@ -2175,14 +2180,14 @@ function renderCraft() {
     html += '<div class="tier">' + t + '단계' + (BENCH.tier < t ? ' 🔒 (제작대 ' + t + '단계 필요)' : '') + '</div><div class="grid">';
     RECIPES.forEach(function (r, i) {
       if (r.tier !== t) return;
-      var done = r.ok && !r.ok(), lock = BENCH.tier < t, afford = canAfford(r);
+      var done = r.ok && !r.ok(), needMsg = r.need ? r.need() : '', lock = BENCH.tier < t || !!needMsg, afford = canAfford(r);
       var cls = done ? 'done' : (lock ? 'lock' : (afford ? '' : 'no'));
       var cost = Object.keys(r.cost).map(function (k) {
         var enough = haveMat(k) >= r.cost[k];
         return '<span style="color:' + (enough ? '#9ae0a0' : '#ff9a8a') + '">' + MAT_NAME[k] + ' ' + r.cost[k] + '</span>';
       }).join(' ');
       html += '<div class="rc ' + cls + '" data-i="' + i + '"><b>' + r.name + (done ? ' ✔' : '') + '</b>' +
-              '<span class="d">' + r.desc + '</span><span class="c">' + cost + '</span></div>';
+              '<span class="d">' + (needMsg ? '🔒 ' + needMsg : r.desc) + '</span><span class="c">' + cost + '</span></div>';
     });
     html += '</div>';
   });
@@ -2193,7 +2198,7 @@ document.getElementById('craftList').addEventListener('click', function (e) {
   var el = e.target.closest('.rc');
   if (!el) return;
   var r = RECIPES[+el.dataset.i];
-  if ((r.ok && !r.ok()) || BENCH.tier < r.tier || !canAfford(r)) return;
+  if ((r.ok && !r.ok()) || (r.need && r.need()) || BENCH.tier < r.tier || !canAfford(r)) return;
   Object.keys(r.cost).forEach(function (k) { spendMat(k, r.cost[k]); });
   r.make();
   stats.crafted++;
@@ -2338,7 +2343,12 @@ function shoot() {
   var gun = null;
   if (gear.rifle && inv.rammo > 0) gun = { key:'rammo', dmg:6, range:70, cool:0.9, name:'소총' };
   else if (gear.revolver && inv.ammo > 0) gun = { key:'ammo', dmg:3, range:45, cool:0.45, name:'리볼버' };
-  if (!gun) { toast(gear.rifle || gear.revolver ? '탄약이 없다' : '총이 없다', '제작대에서 만들거나 보물상자에서 찾으세요'); return; }
+  if (!gun) {
+    if (!gear.revolver && !gear.rifle) toast('🔫 총이 없다' + (inv.ammo || inv.rammo ? ' — 탄약만으로는 쏠 수 없다' : ''),
+                                              '리볼버는 제작대 2단계에서 만들거나 보물상자에서 찾으세요');
+    else toast('🔫 탄약이 없다', gear.revolver ? '리볼버 탄약은 제작대에서 고철 4로 만든다' : '소총 탄약은 제작대 3단계에서 만든다');
+    return;
+  }
   inv[gun.key]--; shotCool = gun.cool; player.swing = 0.2;
   var fx = Math.sin(camYaw), fz = Math.cos(camYaw), p = player.pos;
   var best = null, bestT = gun.range;
@@ -3408,8 +3418,8 @@ function updateHUD(dt) {
   h += list.length ? list.join('<br>') : '<span style="opacity:.6">비어 있음</span>';
   var eq = ['🪓 ' + AXES[gear.axe].name];
   if (gear.spear) eq.push('🔱 창');
-  if (gear.revolver) eq.push('🔫 리볼버');
-  if (gear.rifle) eq.push('🎯 소총');
+  if (gear.revolver) eq.push('🔫 리볼버 · 탄약 ' + inv.ammo + ' (F)');
+  if (gear.rifle) eq.push('🎯 소총 · 탄약 ' + inv.rammo + ' (F)');
   if (gear.armor) eq.push('🛡️ ' + ARMORS[gear.armor].name);
   eq.push('🔦 ' + LIGHTS[gear.light].name);
   h += '<div class="h">장비</div>' + eq.join('<br>');
