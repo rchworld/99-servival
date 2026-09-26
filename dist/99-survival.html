@@ -47,6 +47,7 @@
   #hurt { position:fixed; inset:0; z-index:8; pointer-events:none; opacity:0;
           box-shadow:inset 0 0 160px 40px rgba(200,0,0,.8); }
 
+  #fade { position:fixed; inset:0; z-index:9; pointer-events:none; opacity:0; background:#000; }
   #flashFx { position:fixed; inset:0; z-index:7; pointer-events:none; opacity:0; background:#dfe8ff; }
 
   #toast {
@@ -147,6 +148,7 @@
 <div id="cross"></div>
 <div id="hurt"></div>
 <div id="flashFx"></div>
+<div id="fade"></div>
 <div id="toast"></div>
 
 <div id="craft" class="hide">
@@ -175,6 +177,7 @@
       <div class="key"><b>T</b> 곰덫 설치</div>
       <div class="key"><b>V</b>/<b>우클릭</b> 손전등</div>
       <div class="key"><b>G</b> 소환</div>
+      <div class="key"><b>Z</b> 다이너마이트 던지기</div>
     </div>
     <ul class="rules">
       <li>🔥 <b>모닥불</b>에 통나무·석탄·연료통을 넣어 불을 지키세요. 불빛 안은 안전하고, 많이 넣을수록 레벨이 올라 넓어집니다.</li>
@@ -188,7 +191,7 @@
       <li>🐯🐍 숲 깊은 곳에 <b>호랑이와 구렁이</b>가 삽니다. 곰보다 <b>2배</b> 아프게 물고, <b>모닥불 빛 안에도 들어옵니다.</b></li>
       <li>🪺 나무에 <b>까치 둥지</b>가 있는데, 몇 개는 <b>떨어질 뻔합니다</b>. 가까이서 <b>점프</b>하면 둥지를 고쳐 줄 수 있고, 그 까치는 <b>은혜를 갚으려</b> 따라다니다 호랑이·구렁이가 오면 달려들어 공격하고 숨을 거둡니다.</li>
       <li>🌟 <b>G</b> 를 누르면 설탕 도망쳐!의 <b>소환</b>처럼 <b>배가 아주 큰 학생</b>이 나타나 적을 막아서고 <b>엉덩이 방귀</b>로 멀리 날려 버립니다 (30초마다 다시 쓸 수 있습니다).</li>
-      <li>👶 숲 가장자리의 <b>길 잃은 아이 4명</b>을 찾아 모닥불까지 데려오세요.</li>
+      <li>👶 아이 4명은 <b>지하 굴</b>에 갇혀 있습니다. 모닥불에서 뻗은 <b>흙길</b>을 따라가면 <b>계단</b>이 나오고, 내려가면 <b>곰 소굴</b>입니다. 숲 어딘가의 <b>🧨 다이너마이트</b>(Z 로 던지기)로 곰을 날리거나 <b>🗡️ 푸른 검</b>을 찾아 싸우세요. 안쪽의 <b>단단한 문</b>은 검이나 다이너마이트로만 부술 수 있고, 문 너머 방에 아이가 있습니다.</li>
     </ul>
     <button id="startBtn">숲으로 들어가기</button>
   </div>
@@ -235,6 +238,18 @@ var DAY = 90, NIGHT = 60, CYCLE = DAY + NIGHT;   // 낮 1분 30초 + 밤 1분 = 
 var NIGHTS_GOAL = 99;
 var WORLD_R = 112;                               // 숲의 반지름
 var CAMP = { x:0, z:0 };
+var CAVE_ANG = [0.6, 2.2, 3.8, 5.3];             // 모닥불에서 네 방향으로 난 길 끝에 계단
+var CAVE_R = WORLD_R - 12;
+var SWORD_SPOT = { x:Math.cos(1.4) * 78, z:Math.sin(1.4) * 78 };
+function nearPath(x, z, w) {                     // 계단으로 가는 길 위인가
+  for (var i = 0; i < CAVE_ANG.length; i++) {
+    var ux = Math.cos(CAVE_ANG[i]), uz = Math.sin(CAVE_ANG[i]);
+    var t = x * ux + z * uz;
+    if (t < 12 || t > CAVE_R + 6) continue;
+    if (Math.abs(x * uz - z * ux) < (w || 3)) return true;
+  }
+  return false;
+}
 var G = 20;
 
 // 캠프 시설
@@ -268,7 +283,8 @@ var ITEM = {
   pelt:   { name:'가죽',       icon:'🟫' },
   ammo:   { name:'리볼버 탄약', icon:'•' },
   rammo:  { name:'소총 탄약',   icon:'▪' },
-  trap:   { name:'곰덫',       icon:'🪤' }
+  trap:   { name:'곰덫',       icon:'🪤' },
+  dynamite:{ name:'다이너마이트', icon:'🧨' }
 };
 var BULK_KEYS = Object.keys(ITEM).filter(function (k) { return ITEM[k].bulk; });
 var SCRAP_KEYS = BULK_KEYS.filter(function (k) { return ITEM[k].scrap; });
@@ -283,7 +299,7 @@ var inv = {}, gear = {}, store = {};
 function resetInventory() {
   Object.keys(ITEM).forEach(function (k) { inv[k] = 0; });
   gear.axe = 0; gear.spear = false; gear.revolver = false; gear.rifle = false;
-  gear.armor = 0; gear.light = 0; gear.sack = 0; gear.bigFire = false;
+  gear.armor = 0; gear.light = 0; gear.sack = 0; gear.bigFire = false; gear.sword = false;
   store.log = 0; store.scrap = 0; store.raw = 0; store.cooked = 0; store.pelt = 0;
   inv.berry = 2;
 }
@@ -472,6 +488,7 @@ var dummy = new THREE.Object3D();
   while (TREES.length < 340) {
     var a = rnd() * Math.PI * 2, r = 18 + Math.sqrt(rnd()) * (WORLD_R + 14 - 18);
     var x = Math.cos(a) * r, z = Math.sin(a) * r, ok = true;
+    if (nearPath(x, z, 3.2) || Math.hypot(x - SWORD_SPOT.x, z - SWORD_SPOT.z) < 5) continue;
     for (var i = 0; i < TREES.length; i++) {
       if (Math.hypot(TREES[i].x - x, TREES[i].z - z) < 4.6) { ok = false; break; }
     }
@@ -632,6 +649,8 @@ function pickupMesh(kind) {
     var lf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 5), PM.green); lf.rotation.z = -Math.PI / 2; lf.position.set(0.35, 0.12, 0); g.add(lf);
   } else if (kind === 'apple') {
     m = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), PM.apple); m.position.y = 0.17; g.add(m);
+  } else if (kind === 'dynamite') {
+    var dm = dynamiteMesh(); dm.position.y = 0.05; g.add(dm);
   } else if (kind === 'log') {
     m = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.3, 7), PM.wood); m.rotation.z = Math.PI / 2; m.position.y = 0.18; g.add(m);
   }
@@ -680,7 +699,7 @@ var CHESTS = [];
 var LOOT_NEAR = [['bandage', 1, 3], ['carrot', 2, 3], ['apple', 2, 2], ['bolt', 2, 3], ['sheet', 1, 3],
                  ['coal', 1, 2], ['cooked', 1, 2], ['ammo', 6, 1], ['gear:axe1', 0, 1], ['gear:sack1', 0, 1],
                  ['gear:armor1', 0, 0.8], ['gear:spear', 0, 0.8]];
-var LOOT_FAR = [['medkit', 1, 3], ['cake', 1, 1.2], ['gear:revolver', 0, 1], ['ammo', 6, 2], ['gear:light1', 0, 1],
+var LOOT_FAR = [['dynamite', 1, 1], ['medkit', 1, 3], ['cake', 1, 1.2], ['gear:revolver', 0, 1], ['ammo', 6, 2], ['gear:light1', 0, 1],
                 ['gear:sack1', 0, 1], ['gear:sack2', 0, 0.5], ['gear:axe2', 0, 0.7], ['gear:rifle', 0, 0.4],
                 ['rammo', 5, 1], ['gear:armor2', 0, 0.4], ['fuel', 1, 2], ['sheet', 2, 2], ['fan', 1, 1.2]];
 
@@ -781,7 +800,7 @@ function makeHuman(shirtC, pantsC, hatC, skinC) {
       var handle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6), mat(0x7a5a38, 0.8));
       handle.rotation.x = Math.PI / 2; handle.position.set(0, -0.85, 0.4); sh.add(handle);
       var blade = box(0.08, 0.35, 0.3, mat(0xb8c0c8, 0.3, 0.8)); blade.position.set(0, -0.72, 0.85); sh.add(blade);
-      h.blade = blade;
+      h.blade = blade; h.handle = handle;
     }
     g.add(sh); h.arms.push(sh);
   });
@@ -805,7 +824,7 @@ function animateHuman(h, moving, speed, swing, dt) {
 
 /* ---- 플레이어 ---- */
 var player = {
-  pos:new THREE.Vector3(0, 0, 6), vel:new THREE.Vector3(), yaw:Math.PI, grounded:true, r:0.5,
+  pos:new THREE.Vector3(0, 0, 6), vel:new THREE.Vector3(), yaw:Math.PI, grounded:true, r:0.5, dungeon:-1,
   swing:0, hp:100, hunger:100, stamina:100, beam:100, rescued:0, hurtT:0, alive:true, isPlayer:true, name:'나'
 };
 (function () {
@@ -814,6 +833,16 @@ var player = {
   // 갑옷 (가죽 / 철) — 몸통 위에 덧입는다
   player.armorMesh = box(0.98, 0.95, 0.52, mat(0x7a5230, 0.8));
   player.armorMesh.position.y = 1.3; player.armorMesh.visible = false; player.group.add(player.armorMesh);
+  // 푸른 검 — 뽑으면 도끼 대신 손에 든다
+  var sw = new THREE.Group();
+  var sblade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 1.5),
+    new THREE.MeshStandardMaterial({ color:0x6ac8ff, emissive:0x2a7aff, emissiveIntensity:1.3, roughness:0.2, metalness:0.6 }));
+  sblade.position.z = 0.95; sw.add(sblade);
+  var guard = box(0.42, 0.08, 0.08, mat(0xd8b040, 0.35, 0.8)); guard.position.z = 0.2; sw.add(guard);
+  var grip = box(0.07, 0.07, 0.35, mat(0x2a2a40, 0.6)); grip.position.z = 0.02; sw.add(grip);
+  sw.position.set(0, -0.85, 0.05); sw.visible = false;
+  player.arms[1].add(sw);
+  player.swordMesh = sw;
 })();
 
 var aura = new THREE.PointLight(0xa8b8ff, 0, 11, 1.6);
@@ -1266,13 +1295,13 @@ function resetSummon() {
 
 function nearestThreat() {
   var best = null, bd = 40;
-  BEASTS.forEach(function (w) {
+  beastsHere().forEach(function (w) {
     if (w.dead > 0 || w.fly) return;
     var d = Math.hypot(w.pos.x - player.pos.x, w.pos.z - player.pos.z);
     var score = d - (w.T.camp ? 15 : 0) - (w.target === player ? 8 : 0);   // 호랑이·구렁이, 나를 노리는 놈 먼저
     if (d < 40 && score < bd) { bd = score; best = w; }
   });
-  if (DEER.state !== 'gone' && !DEER.fly) {
+  if (player.dungeon < 0 && DEER.state !== 'gone' && !DEER.fly) {
     var dd = DEER.pos.distanceTo(player.pos);
     if (dd < 40 && dd - 20 < bd) best = DEER;
   }
@@ -1323,12 +1352,12 @@ function updateSummon(dt) {
       SUMMON.blast.position.set(SUMMON.bx, 2.2, SUMMON.bz);
       SUMMON.blast.visible = true;
       // 엉덩이 방귀 — 근처 적은 모두 멀리 날아간다
-      BEASTS.forEach(function (w) {
+      beastsHere().forEach(function (w) {
         if (w.dead > 0 || w.fly) return;
         if (Math.hypot(w.pos.x - SUMMON.bx, w.pos.z - SUMMON.bz) > 22 && w !== th) return;
         launchAway(w, SUMMON.bx, SUMMON.bz);
       });
-      if (DEER.state !== 'gone' && (th === DEER || DEER.pos.distanceTo(new THREE.Vector3(SUMMON.bx, 0, SUMMON.bz)) < 22)) {
+      if (player.dungeon < 0 && DEER.state !== 'gone' && (th === DEER || DEER.pos.distanceTo(new THREE.Vector3(SUMMON.bx, 0, SUMMON.bz)) < 22)) {
         launchAway(DEER, SUMMON.bx, SUMMON.bz);
       }
     }
@@ -1349,8 +1378,402 @@ function launchAway(o, bx, bz) {
   var dx = o.pos.x - bx, dz = o.pos.z - bz, d = Math.hypot(dx, dz) || 1;
   var tx = o.pos.x + dx / d * 38, tz = o.pos.z + dz / d * 38;
   var tr = Math.hypot(tx, tz);
-  if (tr > WORLD_R - 2) { tx *= (WORLD_R - 2) / tr; tz *= (WORLD_R - 2) / tr; }
+  if (o.dungeon) {                                   // 굴 속에서는 벽까지만 날아간다
+    tx = Math.max(o.dungeon.x - HALL.w + 1.5, Math.min(o.dungeon.x + HALL.w - 1.5, tx));
+    tz = Math.max(o.dungeon.z + 2, Math.min(o.dungeon.z + HALL.len - 2, tz));
+  } else if (tr > WORLD_R - 2) { tx *= (WORLD_R - 2) / tr; tz *= (WORLD_R - 2) / tr; }
   o.fly = { fx:o.pos.x, fz:o.pos.z, tx:tx, tz:tz, k:0 };
+}
+
+
+/* ------------------------------------------------------------------ *
+ *  지하 굴 — 길 끝의 계단을 내려가면 곰 소굴이 있다.
+ *  곰들을 다이너마이트(Z)로 날리거나 푸른 검으로 싸우고,
+ *  단단한 문을 부수면 방 안에 아이가 갇혀 있다.
+ * ------------------------------------------------------------------ */
+
+var DUNGEONS = [];
+var HALL = { w:12, len:34, h:7 }, ROOM = { w:5, len:8 }, DOOR_W = 1.6;
+var DLIGHTS = [];
+var BOOMS = [], EXPLOS = [], shake = 0;
+var SWORD = { taken:false, group:new THREE.Group(), light:null };
+var BOOM_LIGHT = new THREE.PointLight(0xffa040, 0, 30, 1.5);
+scene.add(BOOM_LIGHT);
+
+(function buildDungeons() {
+  var rock = mat(0x4a4540, 0.95), rock2 = mat(0x3a3632, 0.95), floorM = mat(0x2e2a28, 1);
+  var stone = mat(0x8a8680, 0.9), dirt = mat(0x6b5a40, 1), black = new THREE.MeshBasicMaterial({ color:0x000000 });
+  var wood = mat(0x6a4526, 0.85), iron = mat(0x3a3e44, 0.4, 0.7), flameM = new THREE.MeshBasicMaterial({ color:0xffa030 });
+  var boneM = mat(0xe8e0cc, 0.7);
+  for (var li = 0; li < 3; li++) {
+    var L = new THREE.PointLight(0xffb060, 0, 26, 1.4); scene.add(L); DLIGHTS.push(L);
+  }
+  function blk(x0, x1, y0, y1, z0, z1, m, parent) {
+    var b = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), m);
+    b.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); b.receiveShadow = true;
+    (parent || scene).add(b); return b;
+  }
+
+  CAVE_ANG.forEach(function (a, i) {
+    /* --- 땅 위: 모닥불에서 계단까지 난 흙길과 돌 계단 입구 --- */
+    var len = CAVE_R - 18;
+    var path = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.4), dirt);
+    path.rotation.x = -Math.PI / 2; path.rotation.z = a;          // x축을 길 방향으로
+    path.position.set(Math.cos(a) * (15 + len / 2), 0.012, Math.sin(a) * (15 + len / 2));
+    path.rotation.set(-Math.PI / 2, 0, -a);
+    path.receiveShadow = true; scene.add(path);
+
+    var sx = Math.cos(a) * CAVE_R, sz = Math.sin(a) * CAVE_R;
+    var ent = new THREE.Group();
+    ent.position.set(sx, 0, sz);
+    ent.rotation.y = Math.atan2(-sx, -sz);                           // 입구가 모닥불 쪽을 본다 (+z 가 앞)
+    var mound = new THREE.Mesh(new THREE.SphereGeometry(3.4, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), rock);
+    mound.scale.set(1, 0.75, 1); mound.position.z = -1.6; mound.castShadow = true; ent.add(mound);
+    [-1.3, 1.3].forEach(function (px) { blk(px - 0.3, px + 0.3, 0, 3.0, 0.9, 1.5, stone, ent); });
+    blk(-1.7, 1.7, 3.0, 3.5, 0.85, 1.55, stone, ent);
+    var hole = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.9, 0.2), black); hole.position.set(0, 1.45, 0.95); ent.add(hole);
+    for (var st = 0; st < 5; st++) {                                  // 어둠 속으로 내려가는 계단
+      var h2 = 0.42 - st * 0.1;
+      blk(-0.95, 0.95, 0, Math.max(0.03, h2), 1.2 - st * 0.34, 1.52 - st * 0.34, st % 2 ? stone : rock2, ent);
+    }
+    var sign = textSprite('⬇ 지하 계단', '#ffd9a0', 1.8); sign.position.set(0, 4.3, 1.2); ent.add(sign);
+    scene.add(ent);
+    SOLIDS.push({ x:sx - Math.cos(a) * -0 + Math.sin(ent.rotation.y) * -1.6, z:sz + Math.cos(ent.rotation.y) * -1.6, r:2.6 });
+    var front = { x:sx + Math.sin(ent.rotation.y) * 2.8, z:sz + Math.cos(ent.rotation.y) * 2.8 };
+
+    /* --- 땅 밑: 곰 소굴 · 문 · 아이가 갇힌 방 --- */
+    var D = { i:i, x:400 + i * 80, z:0, front:front, yawOut:ent.rotation.y, bears:[], door:null, alarm:false, cleared:false };
+    var W = HALL.w, Lh = HALL.len, H = HALL.h, R = ROOM, g = new THREE.Group();
+    g.position.set(D.x, 0, D.z); scene.add(g);
+    blk(-W - 1, W + 1, -0.4, 0, -1, Lh + R.len + 1, floorM, g);
+    blk(-W - 1, W + 1, H, H + 0.6, -1, Lh + R.len + 1, rock2, g);                 // 천장
+    blk(-W - 1, -W, 0, H, -1, Lh, rock, g); blk(W, W + 1, 0, H, -1, Lh, rock, g);   // 양옆 벽
+    blk(-W, W, 0, H, -1, 0, rock, g);                                            // 계단 쪽 벽
+    blk(-W, -DOOR_W, 0, H, Lh, Lh + 0.8, rock, g); blk(DOOR_W, W, 0, H, Lh, Lh + 0.8, rock, g);
+    blk(-DOOR_W, DOOR_W, 3.4, H, Lh, Lh + 0.8, rock, g);                        // 문 위 벽
+    blk(-R.w - 1, -R.w, 0, H, Lh, Lh + R.len + 1, rock, g); blk(R.w, R.w + 1, 0, H, Lh, Lh + R.len + 1, rock, g);
+    blk(-R.w, R.w, 0, H, Lh + R.len, Lh + R.len + 1, rock, g);
+    // 올라가는 계단 (출구)
+    for (var s2 = 0; s2 < 6; s2++) blk(-1.6, 1.6, 0, 2.2 - s2 * 0.36, 0, 0.45 + s2 * 0.4, s2 % 2 ? stone : rock2, g);
+    var up = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.6, 0.1), black); up.position.set(0, 3.5, 0.02); g.add(up);
+    var upSign = textSprite('⬆ 출구 계단', '#ffd9a0', 1.6); upSign.position.set(0, 5.4, 0.6); g.add(upSign);
+    // 기둥
+    D.pillars = [[-6, 11], [6, 11], [-6, 24], [6, 24]].map(function (pp) {
+      var c = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.95, H, 10), rock2);
+      c.position.set(pp[0], H / 2, pp[1]); c.castShadow = true; g.add(c);
+      return { x:D.x + pp[0], z:D.z + pp[1], r:0.9 };
+    });
+    // 횃불 (빛은 굴 안에 있을 때만 켜지는 공용 조명이 맡는다)
+    [4, 12, 20, 28].forEach(function (tz) {
+      [-W + 0.15, W - 0.15].forEach(function (tx) {
+        var stick = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.7, 6), wood);
+        stick.position.set(tx, 3.2, tz); stick.rotation.z = tx < 0 ? -0.5 : 0.5; g.add(stick);
+        var fl = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.45, 7), flameM);
+        fl.position.set(tx + (tx < 0 ? 0.2 : -0.2), 3.7, tz); g.add(fl);
+      });
+    });
+    // 뼈다귀
+    for (var bn = 0; bn < 7; bn++) {
+      var bone = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.8, 5), boneM);
+      bone.rotation.z = Math.PI / 2; bone.rotation.y = bn * 1.7;
+      bone.position.set(-9 + (bn * 37 % 18), 0.06, 6 + (bn * 13 % 26)); g.add(bone);
+    }
+    // 단단한 문 — 푸른 검이나 다이너마이트로만 부술 수 있다
+    var dg = new THREE.Group();
+    blk(-DOOR_W, DOOR_W, 0, 3.4, Lh - 0.15, Lh + 0.3, wood, dg);
+    [0.5, 1.7, 2.9].forEach(function (by) { blk(-DOOR_W, DOOR_W, by - 0.1, by + 0.1, Lh - 0.22, Lh - 0.12, iron, dg); });
+    var ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 6, 12), iron); ring.position.set(0.8, 1.6, Lh - 0.25); dg.add(ring);
+    g.add(dg);
+    var pieces = new THREE.Group();
+    for (var pc = 0; pc < 6; pc++) {
+      var plank = box(0.45, 0.12, 1.6, wood);
+      plank.position.set(-1.6 + pc * 0.6 + (pc % 2) * 0.2, 0.08, Lh - 1.2 - (pc % 3) * 0.7); plank.rotation.y = pc * 0.9; pieces.add(plank);
+    }
+    pieces.visible = false; g.add(pieces);
+    D.door = { hp:3, broken:false, group:dg, pieces:pieces, x:D.x, z:D.z + Lh };
+    // 방 안의 짚더미
+    var straw = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.5, 0.35, 12), mat(0xc8a850, 1)); straw.position.set(2.8, 0.17, Lh + 6); g.add(straw);
+    // 잠든 곰들
+    for (var bi = 0; bi < 8; bi++) {
+      var w = makeBeast('bear');
+      BEASTS.splice(BEASTS.indexOf(w), 1);
+      w.dungeon = D;
+      D.bears.push(w);
+    }
+    D.kidHome = new THREE.Vector3(D.x, 0, D.z + Lh + 5.5);
+    DUNGEONS.push(D);
+  });
+
+  /* --- 숲 어딘가의 푸른 검 --- */
+  var sg = SWORD.group;
+  var ped = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.9, 8), stone); ped.position.y = 0.45; ped.castShadow = true; sg.add(ped);
+  var bladeM = new THREE.MeshStandardMaterial({ color:0x6ac8ff, emissive:0x2a7aff, emissiveIntensity:1.5, roughness:0.2, metalness:0.6 });
+  var blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 0.04), bladeM); blade.position.y = 1.5; sg.add(blade);
+  var gd = box(0.5, 0.08, 0.1, mat(0xd8b040, 0.35, 0.8)); gd.position.y = 2.32; sg.add(gd);
+  var hilt = box(0.08, 0.4, 0.08, mat(0x2a2a40, 0.6)); hilt.position.y = 2.55; sg.add(hilt);
+  SWORD.light = new THREE.PointLight(0x3a9aff, 1.6, 12, 1.5); SWORD.light.position.y = 2; sg.add(SWORD.light);
+  sg.position.set(SWORD_SPOT.x, 0, SWORD_SPOT.z);
+  scene.add(sg);
+})();
+
+function resetDungeons() {
+  DUNGEONS.forEach(function (D) {
+    D.alarm = false; D.cleared = false;
+    D.door.hp = 3; D.door.broken = false; D.door.group.visible = true; D.door.pieces.visible = false;
+    D.bears.forEach(function (w, k) {
+      w.hp = w.T.hp; w.dead = 0; w.sleep = true; w.fly = null; w.knock = 0; w.cool = 0; w.y = 0;
+      w.pos.set(D.x - 8 + (k % 4) * 5.3 + (k * 7 % 3) * 0.6, 0, D.z + 17 + Math.floor(k / 4) * 9 + (k % 3) * 1.2);
+      w.home.copy(w.pos); w.yaw = k * 1.3;
+      w.group.visible = true; w.group.rotation.set(0, w.yaw, 0.9); w.group.position.copy(w.pos);
+    });
+  });
+  KIDS.forEach(function (k) {
+    k.state = 'locked'; k.pos.copy(k.home); k.marker.visible = true; k.group.position.copy(k.pos);
+  });
+  SWORD.taken = false; SWORD.group.visible = true;
+  player.dungeon = -1;
+  BOOMS.forEach(function (b) { scene.remove(b.mesh); }); BOOMS.length = 0;
+  EXPLOS.forEach(function (e) { scene.remove(e); }); EXPLOS.length = 0;
+  [[1.2, 40], [2.9, 62], [4.5, 48], [5.9, 70], [0.1, 86], [3.3, 88]].forEach(function (d) {   // 다이너마이트 자리
+    var x = Math.cos(d[0]) * d[1], z = Math.sin(d[0]) * d[1];
+    spawnPickup('dynamite', x, z); spawnPickup('dynamite', x + 0.8, z + 0.5);
+  });
+}
+
+// 굴 안에서는 벽을 넘지 못한다. 문이 부서져야 방으로 들어간다.
+function dungeonClamp(pos, r, D) {
+  var lx = pos.x - D.x, lz = pos.z - D.z, Lh = HALL.len;
+  var inGap = Math.abs(lx) < DOOR_W - r * 0.6 && D.door.broken;
+  if (lz < Lh + (inGap ? 0 : 0.4)) {
+    lx = Math.max(-HALL.w + r, Math.min(HALL.w - r, lx));
+    lz = Math.max(0.5 + r, lz);
+    if (!inGap && lz > Lh - r - 0.15) lz = Lh - r - 0.15;
+  } else {
+    lx = Math.max(-ROOM.w + r, Math.min(ROOM.w - r, lx));
+    lz = Math.min(Lh + ROOM.len - r, lz);
+    if (!inGap && lz < Lh + 0.8 + r) lz = Lh + 0.8 + r;
+  }
+  pos.x = D.x + lx; pos.z = D.z + lz;
+  D.pillars.forEach(function (c) {
+    var dx = pos.x - c.x, dz = pos.z - c.z, d = Math.hypot(dx, dz), min = c.r + r;
+    if (d < min && d > 1e-4) { pos.x = c.x + dx / d * min; pos.z = c.z + dz / d * min; }
+  });
+}
+
+function curDungeon() { return player.dungeon >= 0 ? DUNGEONS[player.dungeon] : null; }
+function beastsHere() { var D = curDungeon(); return D ? D.bears : BEASTS; }
+
+var fadeT = 0;
+function fadeFlash() { fadeT = 1; }
+
+function enterDungeon(D) {
+  fadeFlash();
+  player.dungeon = D.i;
+  player.pos.set(D.x, 0, D.z + 6); player.vel.set(0, 0, 0);
+  camYaw = 0; camPitch = 0.3;
+  var alive = D.bears.filter(function (w) { return w.dead <= 0; }).length;
+  toast('⬇ 어두운 지하 굴로 내려왔다',
+        alive ? '곰 ' + alive + '마리가 잠들어 있다… 다이너마이트(Z)를 던지거나 푸른 검으로 싸우세요' :
+                (D.door.broken ? '' : '안쪽의 문을 부수면 아이가 있다'));
+}
+function exitDungeon() {
+  var D = curDungeon();
+  fadeFlash();
+  player.dungeon = -1;
+  player.pos.set(D.front.x, 0, D.front.z); player.vel.set(0, 0, 0);
+  camYaw = D.yawOut; camPitch = 0.3;
+  toast('⬆ 땅 위로 올라왔다', KIDS.some(function (k) { return k.state === 'follow'; }) ? '아이를 모닥불까지 데려가세요' : '');
+}
+
+function breakDoor(D, how) {
+  if (D.door.broken) return;
+  D.door.broken = true; D.door.group.visible = false; D.door.pieces.visible = true;
+  burst(D.door.x, 1.6, D.door.z, 0x8a5a30, 24);
+  var k = KIDS[D.i];
+  if (k.state === 'locked') k.state = 'free';
+  toast('🚪 ' + how + ' 문이 부서졌다!', '방 안에 ' + k.name + '(이)가 있다 — 가까이 가면 따라온다');
+}
+
+/* ---- 다이너마이트 (Z) ---- */
+function dynamiteMesh() {
+  var g = new THREE.Group(), red = mat(0xc8201a, 0.6);
+  for (var i = 0; i < 3; i++) {
+    var st = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8), red);
+    st.rotation.z = Math.PI / 2; st.position.set(0, 0.08 + (i === 2 ? 0.12 : 0), (i - 1) * 0.12 * (i === 2 ? 0 : 1)); g.add(st);
+  }
+  var band = box(0.1, 0.3, 0.3, mat(0x2a2a2a, 0.8)); band.position.y = 0.12; g.add(band);
+  var fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.25, 4), mat(0xe8e0c0, 0.8));
+  fuse.position.set(0.3, 0.22, 0); fuse.rotation.z = -0.8; g.add(fuse);
+  return g;
+}
+
+function throwDynamite() {
+  if (inv.dynamite <= 0) { toast('🧨 다이너마이트가 없다', '숲 어딘가에 빨간 다이너마이트 묶음이 떨어져 있다'); return; }
+  inv.dynamite--; player.swing = 0.3;
+  var m = dynamiteMesh(); scene.add(m);
+  var spark = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), new THREE.MeshBasicMaterial({ color:0xffe060 }));
+  m.add(spark); spark.position.set(0.38, 0.32, 0);
+  var fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+  BOOMS.push({ mesh:m, spark:spark, pos:new THREE.Vector3(player.pos.x + fx * 0.8, player.pos.y + 1.7, player.pos.z + fz * 0.8),
+               vel:new THREE.Vector3(fx * 12, 5.5, fz * 12), fuse:1.9, dungeon:player.dungeon });
+}
+
+function updateBooms(dt) {
+  for (var i = BOOMS.length - 1; i >= 0; i--) {
+    var b = BOOMS[i];
+    b.vel.y -= G * dt;
+    b.pos.addScaledVector(b.vel, dt);
+    if (b.pos.y < 0.12) { b.pos.y = 0.12; b.vel.y = 0; b.vel.x *= 0.85; b.vel.z *= 0.85; }
+    if (b.dungeon >= 0) dungeonClamp(b.pos, 0.2, DUNGEONS[b.dungeon]); else pushOut(b.pos, 0.2);
+    b.mesh.position.copy(b.pos);
+    b.mesh.rotation.y += dt * 8;
+    b.spark.scale.setScalar(0.6 + Math.random() * 0.9);
+    b.fuse -= dt;
+    if (b.fuse <= 0) { scene.remove(b.mesh); BOOMS.splice(i, 1); explode(b.pos, b.dungeon); }
+  }
+  for (var j = EXPLOS.length - 1; j >= 0; j--) {
+    var e = EXPLOS[j];
+    e.userData.t += dt;
+    var k = e.userData.t / 0.6;
+    e.scale.setScalar(1 + k * 9);
+    e.material.opacity = Math.max(0, 0.85 * (1 - k));
+    if (k >= 1) { scene.remove(e); EXPLOS.splice(j, 1); }
+  }
+  BOOM_LIGHT.intensity = Math.max(0, BOOM_LIGHT.intensity - dt * 14);
+  shake = Math.max(0, shake - dt * 1.5);
+  if (fadeT > 0) fadeT = Math.max(0, fadeT - dt * 1.6);
+  document.getElementById('fade').style.opacity = fadeT.toFixed(2);
+}
+
+function explode(pos, dungeonIdx) {
+  var ball = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshBasicMaterial({ color:0xffa030, transparent:true, opacity:0.85, depthWrite:false }));
+  ball.position.copy(pos); ball.userData.t = 0; scene.add(ball); EXPLOS.push(ball);
+  BOOM_LIGHT.position.set(pos.x, pos.y + 2, pos.z); BOOM_LIGHT.intensity = 7;
+  burst(pos.x, 0.6, pos.z, 0xff7a1a, 24); burst(pos.x, 0.6, pos.z, 0x3a3a3a, 18);
+  if (Math.hypot(player.pos.x - pos.x, player.pos.z - pos.z) < 30) shake = 0.6;
+  var list = dungeonIdx >= 0 ? DUNGEONS[dungeonIdx].bears : BEASTS, killed = 0, name = '';
+  list.forEach(function (w) {
+    if (w.dead > 0) return;
+    var d = Math.hypot(w.pos.x - pos.x, w.pos.z - pos.z);
+    if (d < 9.5) { if (hitBeast(w, 50, pos.x, pos.z, true)) { killed++; name = w.T.name; } }
+    else if (d < 22) w.sleep = false;
+  });
+  if (dungeonIdx >= 0) {
+    var D = DUNGEONS[dungeonIdx];
+    D.alarm = true;                                  // 쾅! 남은 곰들이 모두 깬다
+    if (Math.hypot(D.door.x - pos.x, D.door.z - pos.z) < 6.5) breakDoor(D, '💥 쾅!');
+  } else if (DEER.state !== 'gone' && DEER.pos.distanceTo(pos) < 9.5) stunDeer(5, '💥 폭발에 휘말렸다');
+  humans().forEach(function (h) {
+    if (h.alive && Math.hypot(h.pos.x - pos.x, h.pos.z - pos.z) < 4.5) hurtHuman(h, 30, pos.x, pos.z, 10);
+  });
+  if (killed) toast('💥 콰광!', name + ' ' + killed + '마리가 날아갔다' + (killed > 1 ? '!' : ''));
+}
+
+/* ---- 굴 속 곰 ---- */
+function updateDungeon(dt) {
+  var D = curDungeon();
+  DLIGHTS.forEach(function (L, i) {
+    L.intensity = D ? 1.3 + Math.sin(game.time * 9 + i) * 0.12 : 0;
+    if (D) L.position.set(D.x + (i === 1 ? 0 : (i ? 7 : -7)), 5, D.z + [8, 22, 38][i]);
+  });
+  if (SWORD.group.visible) {
+    SWORD.group.children[1].rotation.y += dt * 0.5;
+    SWORD.light.intensity = 1.3 + Math.sin(game.time * 3) * 0.4;
+  }
+  if (!D) return;
+  var p = player.pos;
+  D.bears.forEach(function (w, idx) {
+    if (w.dead > 0) return;
+    w.cool -= dt; w.flash -= dt; w.knock -= dt;
+    if (w.fly) {
+      w.fly.k += dt / 1.6;
+      var k = Math.min(1, w.fly.k);
+      w.pos.x = w.fly.fx + (w.fly.tx - w.fly.fx) * k; w.pos.z = w.fly.fz + (w.fly.tz - w.fly.fz) * k;
+      w.group.position.set(w.pos.x, Math.sin(Math.PI * k) * 4, w.pos.z); w.group.rotation.x = k * 12;
+      if (k >= 1) { w.fly = null; w.group.rotation.x = 0; w.knock = 2.5; if (hitBeast(w, 3, w.pos.x, w.pos.z, true)) return; }
+      return;
+    }
+    var d = Math.hypot(p.x - w.pos.x, p.z - w.pos.z);
+    if (w.sleep) {
+      if (d < 9 || D.alarm || w.hp < w.T.hp) {
+        w.sleep = false; w.group.rotation.z = 0;
+        if (!D.woke) { D.woke = true; toast('🐻 곰들이 깨어났다!', '조심하세요'); }
+      } else {
+        w.group.rotation.z = 0.9; w.group.position.set(w.pos.x, 0.15 + Math.sin(game.time * 1.5 + idx) * 0.03, w.pos.z);
+        return;
+      }
+    }
+    // 깨어난 곰 옆의 곰도 깬다
+    D.bears.forEach(function (o) { if (o.sleep && o.dead <= 0 && Math.hypot(o.pos.x - w.pos.x, o.pos.z - w.pos.z) < 7) o.sleep = false; });
+    var sp = 0, yaw = null;
+    if (w.knock <= 0 && player.alive) {
+      sp = 4.7;
+      var hitR = player.r + 1.0 * w.T.scale + 0.2;
+      if (d > hitR - 0.3) yaw = stepToward(w.pos, p.x, p.z, sp, dt);
+      else yaw = Math.atan2(p.x - w.pos.x, p.z - w.pos.z);
+      if (d < hitR + 0.3 && w.cool <= 0) {
+        w.cool = 1.6;
+        hurtHuman(player, w.T.dmg[0], w.pos.x, w.pos.z, 9);
+        toast('🐻 곰에게 당했다!', '푸른 검으로 맞서거나 다이너마이트(Z)를 던지세요');
+      }
+    }
+    D.bears.forEach(function (o) {                   // 곰끼리 겹치지 않는다
+      if (o === w || o.dead > 0) return;
+      var dx = w.pos.x - o.pos.x, dz = w.pos.z - o.pos.z, dd = Math.hypot(dx, dz);
+      if (dd < 2.2 && dd > 1e-4) { w.pos.x = o.pos.x + dx / dd * 2.2; w.pos.z = o.pos.z + dz / dd * 2.2; }
+    });
+    dungeonClamp(w.pos, 1.3, D);
+    if (yaw !== null) w.yaw = yaw;
+    w.group.position.copy(w.pos); w.group.rotation.set(0, w.yaw, 0);
+    var s = sp > 0 ? Math.sin(game.time * sp * 3) * 0.6 : 0;
+    w.legs.forEach(function (l, i) { l.rotation.x = (i === 0 || i === 3) ? s : -s; });
+    w.body.material = w.flash > 0 ? HIT_MAT : w.fur;
+  });
+  if (!D.cleared && D.bears.every(function (w) { return w.dead > 0; })) {
+    D.cleared = true;
+    toast('🐻 굴 속 곰을 모두 물리쳤다!', D.door.broken ? '' : '안쪽의 단단한 문을 부수세요 — 푸른 검(E)이나 다이너마이트(Z)');
+  }
+}
+
+function stairsNear(p) {
+  for (var i = 0; i < DUNGEONS.length; i++) if (near(p, DUNGEONS[i].front, 2.4)) return DUNGEONS[i];
+  return null;
+}
+function exitNear(p) { var D = curDungeon(); return D && near(p, { x:D.x, z:D.z + 2.6 }, 2.6) ? D : null; }
+function doorNear(p) { var D = curDungeon(); return D && !D.door.broken && near(p, D.door, 2.8) ? D : null; }
+
+// E 로 하는 굴 관련 행동. 했으면 true
+function caveAction() {
+  var p = player.pos;
+  if (exitNear(p)) { exitDungeon(); return true; }
+  var D = doorNear(p);
+  if (D) {
+    player.swing = 0.3;
+    if (!gear.sword) { toast('🚪 문이 너무 단단하다', '푸른 검이나 다이너마이트(Z)로만 부술 수 있다'); return true; }
+    D.door.hp--;
+    burst(D.door.x, 1.6, D.door.z - 0.3, 0x6ac8ff, 10);
+    if (D.door.hp <= 0) breakDoor(D, '🗡️ 푸른 검에');
+    else toast('🗡️ 쾅!', '문이 흔들린다 (' + D.door.hp + '번 더)');
+    return true;
+  }
+  var S = stairsNear(p);
+  if (S) { enterDungeon(S); return true; }
+  if (!SWORD.taken && near(p, SWORD_SPOT, 2.4)) {
+    SWORD.taken = true; SWORD.group.visible = false; gear.sword = true;
+    burst(SWORD_SPOT.x, 2, SWORD_SPOT.z, 0x6ac8ff, 20);
+    toast('🗡️ 푸른 검을 뽑았다!', '짐승에게 큰 피해(6) · 굴 속 단단한 문도 부술 수 있다');
+    return true;
+  }
+  return false;
+}
+function cavePrompt() {
+  var p = player.pos;
+  if (exitNear(p)) return '⬆ E — 계단을 올라간다';
+  if (doorNear(p)) return gear.sword ? '🗡️ E — 푸른 검으로 문 부수기' : '🚪 단단한 문 — 푸른 검이나 다이너마이트(Z)가 필요하다';
+  if (stairsNear(p)) return '⬇ E — 계단을 내려간다';
+  if (!SWORD.taken && near(p, SWORD_SPOT, 2.4)) return '🗡️ E — 푸른 검 뽑기';
+  return '';
 }
 
 /* ------------------------------------------------------------------ *
@@ -1430,8 +1853,7 @@ var KIDS = [];
 (function buildKids() {
   var shirts = [0x3a7bd5, 0xe0a030, 0xd0457a, 0x44aa66];
   var names = ['도윤', '서아', '하준', '민지'];
-  [0.6, 2.2, 3.8, 5.3].forEach(function (a, i) {
-    var r = WORLD_R - 12;
+  CAVE_ANG.forEach(function (a, i) {
     var g = new THREE.Group();
     var pants = mat(0x33415a, 0.8), skin = mat(0xf0c8a0, 0.6);
     [-0.13, 0.13].forEach(function (lx) { var l = box(0.24, 0.55, 0.24, pants); l.position.set(lx, 0.28, 0); g.add(l); });
@@ -1439,10 +1861,9 @@ var KIDS = [];
     var head = box(0.42, 0.42, 0.42, skin); head.position.y = 1.4; g.add(head);
     var marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.25), new THREE.MeshBasicMaterial({ color:0xffe04a }));
     marker.position.y = 2.3; g.add(marker);
-    var glow = new THREE.PointLight(0xffe08a, 1.2, 12, 1.4); glow.position.y = 2.0; g.add(glow);
-    var home = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
+    var home = DUNGEONS[i].kidHome;
     g.position.copy(home); scene.add(g);
-    KIDS.push({ pos:home.clone(), home:home, state:'lost', group:g, marker:marker, glow:glow, name:names[i] });
+    KIDS.push({ pos:home.clone(), home:home, state:'locked', group:g, marker:marker, name:names[i], cave:i });
   });
 })();
 
@@ -1502,6 +1923,7 @@ addEventListener('keydown', function (e) {
   if (e.code === 'KeyF') shoot();
   if (e.code === 'KeyT') placeTrap();
   if (e.code === 'KeyG') useSummon();
+  if (e.code === 'KeyZ') throwDynamite();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -1577,10 +1999,7 @@ function restart() {
     b.group.rotation.set(0, 0, 0);
   });
   news.length = 0; teamNews('팀원들이 일하러 숲으로 흩어진다');
-  KIDS.forEach(function (k) {
-    k.state = 'lost'; k.pos.copy(k.home); k.marker.visible = true; k.glow.visible = true;
-    k.group.position.copy(k.pos);
-  });
+  resetDungeons();
   DEER.state = 'gone'; DEER.group.visible = false;
   RAIN.on = false; RAIN.amount = 0; RAIN.next = 30 + Math.random() * 110; RAIN.flash = 0;
   SEASON.shown = -1; SEASON.last = 0; SNOW.amount = 0; FALL.amount = 0;
@@ -1757,13 +2176,14 @@ function nearestIn(list, from, maxD, filter) {
 }
 function liveBeast(w) { return w.dead <= 0; }
 
-function meleeDmg() { return Math.max(AXES[gear.axe].hit, gear.spear ? 2.5 : 0); }
+function meleeDmg() { return Math.max(AXES[gear.axe].hit, gear.spear ? 2.5 : 0, gear.sword ? 6 : 0); }
 
 function action() {
   if (actCool > 0) return;
   actCool = 0.3;
   var p = player.pos;
 
+  if (caveAction()) return;
   if (campDist(p) < 4.2) {
     var parts = [];
     ['log', 'coal', 'fuel'].forEach(function (k) {
@@ -1791,7 +2211,7 @@ function action() {
     return;
   }
 
-  var w = nearestIn(BEASTS, p, 3.5, liveBeast);
+  var w = nearestIn(beastsHere(), p, 3.5, liveBeast);
   if (w && Math.hypot(w.pos.x - p.x, w.pos.z - p.z) < 2.3 + w.T.scale * 0.6) {
     player.swing = 0.3;
     hitBeast(w, meleeDmg(), p.x, p.z, true);
@@ -1872,7 +2292,7 @@ function shoot() {
     if (t < 0 || t > bestT) return;
     if (Math.abs(dx * fz - dz * fx) < rad) { bestT = t; best = obj; }
   }
-  BEASTS.forEach(function (w) { if (w.dead <= 0) test(w.pos, 0.9 * w.T.scale, w); });
+  beastsHere().forEach(function (w) { if (w.dead <= 0) test(w.pos, 0.9 * w.T.scale, w); });
   if (DEER.state !== 'gone') test(DEER.pos, 1.0, DEER);
   var end = new THREE.Vector3(p.x + fx * bestT, 1.5, p.z + fz * bestT);
   tracer.geometry.setFromPoints([new THREE.Vector3(p.x + fx * 0.8, 1.5, p.z + fz * 0.8), end]);
@@ -1977,7 +2397,8 @@ function updatePlayer(dt) {
   p.pos.addScaledVector(p.vel, dt);
   if (p.pos.y <= 0) { p.pos.y = 0; p.vel.y = 0; p.grounded = true; }
   pushOut(p.pos, p.r);
-  if (Math.hypot(p.pos.x, p.pos.z) > WORLD_R + 2) {
+  if (p.dungeon >= 0) dungeonClamp(p.pos, p.r, DUNGEONS[p.dungeon]);
+  else if (Math.hypot(p.pos.x, p.pos.z) > WORLD_R + 2) {
     keepInWorld(p.pos, WORLD_R + 2);
     if (!p.edgeMsg || game.time - p.edgeMsg > 6) { p.edgeMsg = game.time; toast('🌫️ 안개가 너무 짙다', '더 이상 나갈 수 없습니다'); }
   }
@@ -1988,6 +2409,8 @@ function updatePlayer(dt) {
   var logs = inv.log;
   p.logPile.forEach(function (lg, i) { lg.visible = i < Math.ceil(logs / 2); });
   p.armorMesh.visible = gear.armor > 0;
+  p.swordMesh.visible = !!gear.sword;
+  p.model.blade.visible = p.model.handle.visible = !gear.sword;
   p.armorMesh.material.color.setHex(gear.armor === 2 ? 0x8a929c : 0x7a5230);
   p.armorMesh.material.metalness = gear.armor === 2 ? 0.7 : 0;
   p.model.blade.material.color.setHex(gear.axe === 3 ? 0xe07a1a : (gear.axe === 2 ? 0x6ac0ff : (gear.axe === 1 ? 0xd8dde2 : 0x9aa0a6)));
@@ -2041,11 +2464,39 @@ function updateBots(dt) {
     if (inSafe(b.pos)) b.hp = Math.min(100, b.hp + 2.5 * dt);
 
     // 가까이 달려든 짐승이 있으면 맞서 싸운다
+    // 팀원들은 그다지 똑똑하지 않다 — 밤이 와도 깜빡하고 안 돌아올 때가 있고, 멍하니 딴짓도 한다
+    if (night && !b.wasNight) {
+      b.forget = Math.random() < 0.4 ? 15 + Math.random() * 45 : 0;
+      if (b.forget) teamNews(b.name + ': ' + pick(['조금만 더 하고 갈게~', '어? 벌써 밤이야?', '저쪽에 뭐가 있는 것 같은데…', '안 무서워! 괜찮아!']));
+    }
+    b.wasNight = night;
+    if (b.forget > 0) {
+      b.forget -= dt;
+      if (b.forget <= 0) teamNews(b.name + ': 으악, 너무 어두워! 캠프로 갈래');
+    }
+    b.dazeT = (b.dazeT || 0) - dt;
+    if (!night && b.state !== 'daze' && b.dazeT < -25 && Math.random() < dt * 0.03) {
+      releaseClaim(b); b.state = 'daze'; b.dazeT = 6 + Math.random() * 9;
+      b.dazeGoal = { x:b.pos.x + (Math.random() - 0.5) * 34, z:b.pos.z + (Math.random() - 0.5) * 34 };
+      teamNews(b.name + ': ' + pick(['어… 내가 뭐 하고 있었지?', '앗, 나비다!', '길을 잃은 것 같아…', '잠깐 쉬었다 할래', '저 구름 토끼 닮았다']));
+    }
     var foe = nearestIn(BEASTS, b.pos, 3.2, function (w) { return w.dead <= 0 && w.target === b; });
-    var goHome = night || b.hp < 35 || (tLeft < 10 && !night);
-    var dest = null;
+    if (foe && game.time > (b.braveT || 0)) { b.brave = Math.random() < 0.55; b.braveT = game.time + 3; }
+    var forgetful = b.forget > 0;
+    var goHome = (night && !forgetful) || (b.hp < 35 && Math.random() > 0.002) || (tLeft < 10 && !night && !forgetful);
+    var dest = null, busy = false;
+    if (foe && !b.brave) {                          // 겁먹고 엉뚱한 쪽으로 도망친다
+      busy = true;
+      dest = { x:b.pos.x + (b.pos.x - foe.pos.x) * 3 + Math.sin(game.time * 2 + b.idx) * 5, z:b.pos.z + (b.pos.z - foe.pos.z) * 3 };
+      foe = null;
+    } else if (b.state === 'daze') {
+      if (b.dazeT > 0 && !goHome) { busy = true; dest = near(b.pos, b.dazeGoal, 1.2) ? null : b.dazeGoal; }
+      else b.state = 'idle';
+    }
 
-    if (foe) {
+    if (busy) {
+      // 도망치거나 딴짓하는 중
+    } else if (foe) {
       b.yaw = Math.atan2(foe.pos.x - b.pos.x, foe.pos.z - b.pos.z);
       if (b.actT <= 0) {
         b.actT = 0.8; b.swing = 0.3;
@@ -2058,6 +2509,11 @@ function updateBots(dt) {
       if (b.state !== 'home') { releaseClaim(b); b.state = 'home'; }
       var s = campSlot(b);
       dest = s;
+      if (b.carry.log >= 2 && Math.random() < dt * 0.04) {   // 가끔 떨어뜨린다
+        var drop = Math.floor(b.carry.log / 2); b.carry.log -= drop;
+        for (var dl = 0; dl < drop; dl++) spawnPickup('log', b.pos.x + (Math.random() - 0.5) * 2, b.pos.z + (Math.random() - 0.5) * 2);
+        teamNews(b.name + ': 앗, 통나무를 ' + drop + '개 떨어뜨렸다!');
+      }
       if (near(b.pos, s, 1.2)) {
         dest = null;
         if (botCarrySum(b) + b.carry.pelt > 0) botDeposit(b);
@@ -2120,7 +2576,7 @@ function updateBots(dt) {
     }
 
     if (dest) {
-      var sp = (goHome && night) ? 7 : 5.2;
+      var sp = busy && foe === null && b.brave === false ? 5.5 : ((goHome && night) ? 6 : 4.5);
       var y = stepToward(b.pos, dest.x, dest.z, sp, dt);
       if (y !== null) { b.yaw = y; b.moving = true; b.speed = sp; }
     }
@@ -2239,7 +2695,7 @@ function updateBeasts(dt) {
     var sight = (night ? w.T.sight[1] : w.T.sight[0]) * (1 - RAIN.amount * 0.2);
     var tgt = null, td = 1e9;
     hs.forEach(function (h) {
-      if (!h.alive || (!w.T.camp && inSafe(h.pos))) return;
+      if (!h.alive || (!w.T.camp && inSafe(h.pos)) || (h.isPlayer && player.dungeon >= 0)) return;
       var d = Math.hypot(h.pos.x - w.pos.x, h.pos.z - w.pos.z);
       var s = sight + (w.target === h ? 12 : 0);
       if (d < s && d < td) { td = d; tgt = h; }
@@ -2337,7 +2793,7 @@ function updateDeer(dt) {
   // 불빛 밖에 있는 가장 가까운 사람을 노린다
   var tgt = null, td = 1e9;
   humans().forEach(function (h) {
-    if (!h.alive || inSafe(h.pos)) return;
+    if (!h.alive || inSafe(h.pos) || (h.isPlayer && player.dungeon >= 0)) return;
     var d = h.pos.distanceTo(DEER.pos);
     if (d < td) { td = d; tgt = h; }
   });
@@ -2384,26 +2840,28 @@ function updateKids(dt) {
   var p = player.pos;
   KIDS.forEach(function (k, i) {
     if (k.state === 'saved') return;
-    if (k.state === 'lost') {
+    if (k.state === 'locked' || k.state === 'free') {
       k.marker.rotation.y += dt * 2;
       k.marker.position.y = 2.3 + Math.sin(game.time * 3 + i) * 0.15;
-      if (Math.hypot(p.x - k.pos.x, p.z - k.pos.z) < 2.2) {
+      k.group.rotation.y = Math.sin(game.time * 0.8 + i) * 0.6 + Math.PI;
+      if (k.state === 'free' && Math.hypot(p.x - k.pos.x, p.z - k.pos.z) < 2.4) {
         k.state = 'follow'; k.marker.visible = false;
-        toast('👶 ' + k.name + '(을)를 찾았다!', '모닥불까지 데려가세요');
+        toast('👶 ' + k.name + '(을)를 찾았다!', '계단으로 올라가 모닥불까지 데려가세요');
       }
     } else {
       var back = 1.8 + i * 0.9;
       var tx = p.x - Math.sin(player.yaw) * back, tz = p.z - Math.cos(player.yaw) * back;
       var d = Math.hypot(tx - k.pos.x, tz - k.pos.z);
+      if (d > 30) { k.pos.set(tx, 0, tz); d = 0; }   // 계단을 함께 오르내린다
       var yaw = stepToward(k.pos, tx, tz, Math.min(11, 2 + d * 2.2), dt);
       if (yaw !== null && d > 0.3) k.group.rotation.y = yaw;
-      pushOut(k.pos, 0.35);
-      if (campDist(k.pos) < Math.max(5, safeR())) {
+      if (player.dungeon >= 0) dungeonClamp(k.pos, 0.35, DUNGEONS[player.dungeon]);
+      else pushOut(k.pos, 0.35);
+      if (player.dungeon < 0 && campDist(k.pos) < Math.max(5, safeR())) {
         k.state = 'saved'; player.rescued++;
         var a = player.rescued / 4 * Math.PI * 2 + 0.3;
         k.pos.set(CAMP.x + Math.cos(a) * 6.3, 0, CAMP.z + Math.sin(a) * 6.3);
         k.group.rotation.y = Math.atan2(CAMP.x - k.pos.x, CAMP.z - k.pos.z);
-        k.glow.visible = false;
         player.hp = 100;
         toast('🎉 ' + k.name + '(을)를 구했다! (' + player.rescued + ' / 4)',
               player.rescued === 4 ? '모든 아이를 구했다!' : '체력이 가득 찼다');
@@ -2534,7 +2992,7 @@ scene.add(snowPts);
 
 function updateSnow(dt) {
   SNOW.amount += ((seasonNow() === 3 ? 1 : 0) - SNOW.amount) * Math.min(1, dt * 0.35);
-  snowPts.visible = SNOW.amount > 0.02;
+  snowPts.visible = SNOW.amount > 0.02 && player.dungeon < 0;
   if (!snowPts.visible) return;
   var cx = player.pos.x, cz = player.pos.z, hw = 35;
   for (var i = 0; i < SNOW.n; i++) {
@@ -2631,7 +3089,7 @@ function updateFalling(dt) {
   if (kind >= 0 && kind !== FALL.kind) want = 0;
   FALL.amount += (want - FALL.amount) * Math.min(1, dt * 0.4);
   var count = Math.floor(FALL.n * FALL.amount * (FALL.kind === 2 ? 0.8 : 1));
-  var per = Math.floor(count / 5);
+  var per = player.dungeon >= 0 ? 0 : Math.floor(count / 5);
   fallMeshes.forEach(function (m) { m.count = per; });
   if (!per) return;
   var cx = player.pos.x, cz = player.pos.z, big = FALL.kind === 2 ? 1.6 : 1;
@@ -2722,7 +3180,7 @@ function updateWeather(dt) {
   var a = RAIN.amount;
 
   // 빗줄기 — 플레이어 주변 상자 안에서 떨어지고, 바닥에 닿으면 위로 돌아간다
-  rainLines.visible = a > 0.02;
+  rainLines.visible = a > 0.02 && player.dungeon < 0;
   if (rainLines.visible) {
     var cx = player.pos.x, cz = player.pos.z, hw = RAIN_BOX.w / 2;
     var active = Math.floor(DROPS * Math.min(1, a * (RAIN.heavy ? 1 : 0.6)));
@@ -2757,6 +3215,7 @@ function updateWeather(dt) {
     }
   }
   var f = RAIN.flash > 0.7 || (RAIN.flash > 0.3 && RAIN.flash < 0.45) ? RAIN.flash : RAIN.flash * 0.3;
+  if (player.dungeon >= 0) f = 0;
   bolt.intensity = f * 2.2;
   document.getElementById('flashFx').style.opacity = (f * 0.35).toFixed(3);
 }
@@ -2785,6 +3244,11 @@ function updateSky() {
   sun.target.position.set(px, 0, pz);
   aura.position.set(px, 2.5, pz);
   aura.intensity = b * 0.5;
+  if (player.dungeon >= 0) {                         // 굴 속은 어둡다
+    scene.background.setHex(0x050506); scene.fog.color.setHex(0x050506);
+    scene.fog.near = 10; scene.fog.far = 50;
+    sun.intensity = 0; hemi.intensity = 0.14; aura.intensity = 0.9;
+  }
 }
 
 function updateCamera() {
@@ -2792,7 +3256,17 @@ function updateCamera() {
   var cp = Math.cos(camPitch);
   var x = p.x - Math.sin(camYaw) * cp * dist, z = p.z - Math.cos(camYaw) * cp * dist;
   var y = Math.max(0.6, p.y + 1.8 + Math.sin(camPitch) * dist);
-  camera.position.set(x, y, z);
+  var CDn = curDungeon();
+  if (CDn) {                                        // 굴 속에서는 카메라가 벽 밖으로 나가지 않는다
+    var plz = p.z - CDn.z, lx = x - CDn.x, lz = z - CDn.z;
+    if (plz < HALL.len) {
+      lx = Math.max(-HALL.w + 0.5, Math.min(HALL.w - 0.5, lx)); lz = Math.max(0.6, Math.min(HALL.len - 0.5, lz));
+    } else {
+      lx = Math.max(-ROOM.w + 0.5, Math.min(ROOM.w - 0.5, lx)); lz = Math.max(HALL.len + 1.0, Math.min(HALL.len + ROOM.len - 0.5, lz));
+    }
+    x = CDn.x + lx; z = CDn.z + lz; y = Math.min(y, HALL.h - 0.5);
+  }
+  camera.position.set(x + (Math.random() - 0.5) * shake, y + (Math.random() - 0.5) * shake, z + (Math.random() - 0.5) * shake);
   camera.lookAt(p.x, p.y + 1.7, p.z);
 }
 
@@ -2807,13 +3281,15 @@ function bar(id, v, color) {
 }
 function promptText() {
   var p = player.pos;
+  var cp = cavePrompt();
+  if (cp) return cp;
   var fn = fallingNestNear(p);
   if (fn) return '🪺 Space — 가까이서 점프해 떨어질 뻔한 까치 둥지를 고쳐 주기';
   if (campDist(p) < 4.2 && (inv.log || inv.coal || inv.fuel || inv.raw)) return '🔥 E — 모닥불에 넣기 / 고기 굽기';
   if (near(p, BENCH, 3.2)) return '🛠️ E — 제작대 열기';
   if (near(p, GRINDER, 2.9)) return '⚙️ E — 고철 분쇄하기';
   if (near(p, STORE_POS, 2.9)) return '📦 E — 캠프 창고';
-  var w = nearestIn(BEASTS, p, 2.9, liveBeast);
+  var w = nearestIn(beastsHere(), p, 2.9, liveBeast);
   if (w) return '⚔️ E — ' + w.T.name + ' 공격';
   if (nearestIn(TRAPS, p, 2.2, function (t) { return !t.armed; })) return '🪤 E — 곰덫 다시 걸기';
   if (nearestIn(CHESTS, p, 2.4, function (c) { return !c.opened; })) return '🎁 E — 보물상자 열기';
@@ -2850,10 +3326,12 @@ function updateHUD(dt) {
   document.getElementById('hungerVal').textContent = Math.ceil(p.hunger);
   document.getElementById('fuelVal').textContent = FIRE.fuel > 0 ? Math.ceil(FIRE.fuel) + '% · Lv' + FIRE.level : '꺼짐!';
 
-  var dx = CAMP.x - p.pos.x, dz = CAMP.z - p.pos.z;
+  var CD = curDungeon(), goal = CD ? { x:CD.x, z:CD.z + 2 } : CAMP;
+  var dx = goal.x - p.pos.x, dz = goal.z - p.pos.z;
   var rel = Math.atan2(dx, dz) - camYaw;
   document.getElementById('arrow').style.transform = 'rotate(' + (-rel) + 'rad)';
-  document.getElementById('campDist').textContent = inSafe(p.pos) ? '🔥 불빛 안 (안전)' : '모닥불 ' + Math.round(campDist(p.pos)) + 'm';
+  document.getElementById('campDist').textContent = CD ? '⬆ 출구 계단 ' + Math.round(Math.hypot(dx, dz)) + 'm' :
+    (inSafe(p.pos) ? '🔥 불빛 안 (안전)' : '모닥불 ' + Math.round(campDist(p.pos)) + 'm');
   var th = document.getElementById('threat');
   if (DEER.state !== 'gone') {
     th.textContent = '🦌 사슴 ' + Math.round(DEER.pos.distanceTo(p.pos)) + 'm';
@@ -2921,6 +3399,8 @@ function loop(now) {
     updateNests(dt);
     updateMagpies(dt);
     updateSummon(dt);
+    updateDungeon(dt);
+    updateBooms(dt);
     updateHUD(dt);
   } else {
     camYaw += dt * 0.05;
@@ -2944,7 +3424,7 @@ document.getElementById('againBtn').onclick = restart;
 window.SURVIVAL = {
   game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, BEASTS:BEASTS, DEER:DEER, KIDS:KIDS,
   BOTS:BOTS, PICKUPS:PICKUPS, CHESTS:CHESTS, TRAPS:TRAPS, RECIPES:RECIPES, BENCH:BENCH, GRINDER:GRINDER,
-  STORE_POS:STORE_POS, NESTS:NESTS, MAGPIES:MAGPIES, SUMMON:SUMMON, useSummon:useSummon, fixNestForTest:function (n) { fixNest(n); }, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, SNOWMEN:SNOWMEN, FALL:FALL,
+  STORE_POS:STORE_POS, DUNGEONS:DUNGEONS, SWORD:SWORD, enterDungeon:enterDungeon, exitDungeon:exitDungeon, throwDynamite:throwDynamite, NESTS:NESTS, MAGPIES:MAGPIES, SUMMON:SUMMON, useSummon:useSummon, fixNestForTest:function (n) { fixNest(n); }, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, SNOWMEN:SNOWMEN, FALL:FALL,
   treeStyle:function () { return TREE_STYLE; }, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
   action:action, eat:eat, heal:heal, shoot:shoot, placeTrap:placeTrap, inSafe:inSafe, restart:restart,
   isCraftOpen:function () { return craftOpen; },
