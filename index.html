@@ -1915,7 +1915,7 @@ function playerDies() {
       p.form = 'child'; p.alive = true; p.hp = 100; p.r = 0.35; p.vel.set(0, 0, 0);
       p.pos.set(kid.pos.x, 0, kid.pos.z);
       p.group.visible = false; CHILD_BODY.group.visible = true;
-      toast('👶 ' + kid.name + '의 몸으로 되살아났다!', '시체는 그대로 남아 있다 — 모닥불까지 가면 ' + kid.name + '(을)를 구한 것이 된다');
+      toast('👶 ' + kid.name + '의 몸으로 되살아났다!', '아이 몸은 체력이 2배 빨리 준다 · 시체는 그대로 남아 있다 · 모닥불까지 가면 ' + kid.name + '(을)를 구한 것이 된다');
       return;
     }
   } else if (p.form === 'child') {                  // 아이 몸마저 쓰러지면 아이는 그 자리에 남는다
@@ -2466,7 +2466,7 @@ function eat() {
   if (!k) { toast('먹을 것이 없다', '열매·당근·사과를 줍거나 사냥하세요'); return; }
   inv[k]--;
   player.hunger = Math.min(100, player.hunger + ITEM[k].food);
-  if (k === 'raw') { player.hp -= 10; toast('🤢 날고기…', '배고픔 +15 · 배탈로 체력 -10'); }
+  if (k === 'raw') { var rawHurt = player.form === 'child' ? 20 : 10; player.hp -= rawHurt; toast('🤢 날고기…', '배고픔 +15 · 배탈로 체력 -' + rawHurt); }
   else if (k === 'cake') { player.hp = Math.min(100, player.hp + 30); toast('🍰 케이크!', '배고픔 가득 · 체력 +30'); }
   else toast(ITEM[k].icon + ' ' + ITEM[k].name, '배고픔 +' + ITEM[k].food);
 }
@@ -2528,6 +2528,7 @@ function hurtHuman(h, dmg, fx, fz, push) {
   if (h.isPlayer) {
     if (player.form === 'ghost') return;           // 유령은 공격받지 않는다
     dmg *= 1 - ARMORS[gear.armor].cut;
+    if (player.form === 'child') dmg *= 2;          // 아이 몸은 2배로 약하다
     h.hp -= dmg; h.hurtT = 0.5;
     var dx = h.pos.x - fx, dz = h.pos.z - fz, d = Math.hypot(dx, dz) || 1;
     h.vel.x = dx / d * push; h.vel.z = dz / d * push; h.vel.y = 5; h.grounded = false;
@@ -3139,7 +3140,7 @@ function updateSurvival(dt) {
   } else {
   p.hunger = Math.max(0, p.hunger - 0.34 * (1 + SNOW.amount * 0.25) * dt);
   if (p.hunger <= 0) {
-    p.hp -= 1.6 * dt;
+    p.hp -= 1.6 * (p.form === 'child' ? 2 : 1) * dt;
     if (!p.starveMsg || game.time - p.starveMsg > 12) { p.starveMsg = game.time; toast('🍽️ 너무 배고프다!', '체력이 줄어듭니다 — Q 로 먹으세요'); }
   } else if (inSafe(p.pos) && p.hunger > 25) {
     p.hp = Math.min(100, p.hp + 2 * dt);
