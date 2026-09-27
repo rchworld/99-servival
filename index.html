@@ -191,6 +191,8 @@
       <li>🐯🐍 숲 깊은 곳에 <b>호랑이와 구렁이</b>가 삽니다. 곰보다 <b>2배</b> 아프게 물고, <b>모닥불 빛 안에도 들어옵니다.</b></li>
       <li>🪺 나무에 <b>까치 둥지</b>가 있는데, 몇 개는 <b>떨어질 뻔합니다</b>. 가까이서 <b>점프</b>하면 둥지를 고쳐 줄 수 있고, 그 까치는 <b>은혜를 갚으려</b> 따라다니다 호랑이·구렁이가 오면 달려들어 공격하고 숨을 거둡니다.</li>
       <li>🌟 <b>G</b> 를 누르면 설탕 도망쳐!의 <b>소환</b>처럼 <b>배가 아주 큰 학생</b>이 나타나 적을 막아서고 <b>엉덩이 방귀</b>로 멀리 날려 버립니다 (30초마다 다시 쓸 수 있습니다).</li>
+      <li>💀 <b>친구가 쓰러지면</b> 그대로 영원히 누워 있고, 시체 위에 <b>'✚ 부활'</b>이 뜹니다. 가까이서 <b>H</b> — 붕대면 체력 50%, 구급상자면 100%로 되살아납니다.</li>
+      <li>👻 <b>내가 쓰러지면</b> 시체를 남기고 <b>유령</b>이 됩니다. 유령은 모든 걸 통과하고, 공격할 수 있고, 공격받지 않습니다. <b>아이를 데리고 가던 중</b>이었다면 그 <b>아이 몸으로</b> 되살아납니다. 친구가 내 시체에 붕대나 구급상자를 쓰면 원래 몸으로 돌아옵니다.</li>
       <li>👶 아이 4명은 <b>지하 굴</b>에 갇혀 있습니다. 모닥불에서 뻗은 <b>흙길</b>을 따라가면 <b>계단</b>이 나오고, 내려가면 <b>곰 소굴</b>입니다. 숲 어딘가의 <b>🧨 다이너마이트</b>(Z 로 던지기)로 곰을 날리거나 <b>🗡️ 푸른 검</b>을 찾아 싸우세요. 안쪽의 <b>단단한 문</b>은 검이나 다이너마이트로만 부술 수 있고, 문 너머 방에 아이가 있습니다.</li>
     </ul>
     <button id="startBtn">숲으로 들어가기</button>
@@ -877,7 +879,7 @@ var BOT_DEFS = [
     BOTS.push({ name:d.name, role:d.role, label:d.label, idx:i, model:h, group:h.group, legs:h.legs, arms:h.arms,
                 logPile:h.logPile, tag:tag, tagC:tagC, tagHp:-1,
                 pos:new THREE.Vector3(), yaw:0, r:0.5, hp:100, alive:true, downT:0,
-                carry:{ log:0, scrap:0, raw:0, pelt:0, coal:0, fuel:0 }, state:'idle', target:null,
+                carry:{ log:0, scrap:0, raw:0, pelt:0, coal:0, fuel:0 }, state:'idle', target:null, kit:{ bandage:1, medkit:0 },
                 actT:0, swing:0, feedT:0, moving:false, speed:0 });
   });
 })();
@@ -888,9 +890,17 @@ function drawTag(b) {
   b.tagHp = hpb;
   var x = b.tagC.getContext('2d');
   x.clearRect(0, 0, 256, 80);
-  x.font = 'bold 30px sans-serif'; x.textAlign = 'center';
-  x.fillStyle = b.alive ? '#fff' : '#ff8a8a';
-  x.fillText(b.alive ? b.name : b.name + ' 💫', 128, 32);
+  x.textAlign = 'center';
+  if (!b.alive) {                                     // 시체 위에 '부활'
+    x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(40, 4, 176, 72);
+    x.font = 'bold 40px sans-serif'; x.fillStyle = '#ff9a9a'; x.fillText('✚ 부활', 128, 44);
+    x.font = 'bold 20px sans-serif'; x.fillStyle = '#fff'; x.fillText(b.name, 128, 70);
+    b.tag.material.map.needsUpdate = true;
+    return;
+  }
+  x.font = 'bold 30px sans-serif';
+  x.fillStyle = '#fff';
+  x.fillText(b.name, 128, 32);
   x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(48, 46, 160, 14);
   x.fillStyle = b.hp > 35 ? '#5ad07a' : '#ff5a4a'; x.fillRect(50, 48, 156 * Math.max(0, b.hp) / 100, 10);
   b.tag.material.map.needsUpdate = true;
@@ -1836,6 +1846,131 @@ function cavePrompt() {
   return '';
 }
 
+
+/* ------------------------------------------------------------------ *
+ *  죽음과 부활
+ *  - 친구가 쓰러지면 누가 붕대(50%)나 구급상자(100%)를 써 주기 전에는 영원히 누워 있다.
+ *  - 내가 쓰러지면 시체를 남기고 유령이 된다. 유령은 모든 걸 통과하고, 공격할 수 있고, 공격받지 않는다.
+ *    아이를 데리고 가던 중이었다면 그 아이의 몸으로 되살아난다.
+ *  - 친구가 내 시체에 붕대나 구급상자를 쓰면 시체 자리에서 원래 몸으로 되살아난다.
+ * ------------------------------------------------------------------ */
+
+var PCORPSE = { active:false, pos:new THREE.Vector3(), dungeon:-1, group:null, label:null };
+var reviver = null;
+var CHILD_BODY = null, possessed = null;
+
+(function buildForms() {
+  var h = makeHuman(0xb8412e, 0x2f3c58, 0x3a2a1a);   // 내 시체 — 나와 같은 옷
+  h.group.rotation.z = Math.PI / 2; h.group.visible = false;
+  if (h.handle) { h.handle.visible = false; h.blade.visible = false; }
+  var label = textSprite('✚ 부활', '#ff9a9a', 1.8); label.position.set(0, 2.6, 0);
+  var holder = new THREE.Group(); holder.add(h.group); h.group.position.y = 0.3;
+  holder.add(label); holder.visible = false; scene.add(holder);
+  PCORPSE.group = holder; PCORPSE.label = label; PCORPSE.body = h.group;
+  var c = makeHuman(0xf0c030, 0x33415a, 0x3a2a1a, 0xf0c8a0);  // 아이 몸
+  c.group.scale.setScalar(0.62); c.group.visible = false;
+  if (c.handle) { c.handle.visible = false; c.blade.visible = false; }
+  CHILD_BODY = c;
+})();
+
+function deadBotNear(p) {
+  if (player.dungeon >= 0) return null;
+  return nearestIn(BOTS, p, 2.6, function (b) { return !b.alive; });
+}
+
+function setGhostLook(on) {
+  player.group.traverse(function (o) {
+    if (!o.isMesh || !o.material || !o.material.emissive) return;
+    if (on) {
+      if (o.userData.ghostSave === undefined) o.userData.ghostSave = o.material.emissive.getHex();
+      o.material.transparent = true; o.material.opacity = 0.38; o.material.depthWrite = false;
+      o.material.emissive.setHex(0x6a8aff);
+    } else if (o.userData.ghostSave !== undefined) {
+      o.material.transparent = false; o.material.opacity = 1; o.material.depthWrite = true;
+      o.material.emissive.setHex(o.userData.ghostSave);
+    }
+    o.castShadow = !on;
+  });
+}
+
+function resetForms() {
+  player.form = 'body'; player.alive = true; player.r = 0.5;
+  PCORPSE.active = false; PCORPSE.group.visible = false;
+  CHILD_BODY.group.visible = false; possessed = null;
+  player.group.visible = true;
+  setGhostLook(false);
+}
+
+function playerDies() {
+  var p = player;
+  if (p.form === 'body') {                           // 몸은 시체로 남는다
+    PCORPSE.active = true; PCORPSE.pos.set(p.pos.x, 0, p.pos.z); PCORPSE.dungeon = p.dungeon;
+    PCORPSE.group.position.copy(PCORPSE.pos); PCORPSE.group.rotation.y = p.yaw;
+    PCORPSE.group.visible = true; PCORPSE.body.visible = true;
+    burst(p.pos.x, 1.2, p.pos.z, 0xc02030, 18);
+    // 아이를 데리고 모닥불로 가던 중이었다면 그 아이의 몸으로 되살아난다
+    var kid = KIDS.find(function (k) { return k.state === 'follow'; });
+    if (kid) {
+      possessed = kid; kid.state = 'possessed'; kid.group.visible = false;
+      p.form = 'child'; p.alive = true; p.hp = 100; p.r = 0.35; p.vel.set(0, 0, 0);
+      p.pos.set(kid.pos.x, 0, kid.pos.z);
+      p.group.visible = false; CHILD_BODY.group.visible = true;
+      toast('👶 ' + kid.name + '의 몸으로 되살아났다!', '시체는 그대로 남아 있다 — 모닥불까지 가면 ' + kid.name + '(을)를 구한 것이 된다');
+      return;
+    }
+  } else if (p.form === 'child') {                  // 아이 몸마저 쓰러지면 아이는 그 자리에 남는다
+    CHILD_BODY.group.visible = false;
+    if (possessed && possessed.state === 'possessed') {
+      possessed.state = 'free'; possessed.pos.set(p.pos.x, 0, p.pos.z); possessed.group.visible = true; possessed.marker.visible = true;
+    }
+    possessed = null;
+  }
+  p.form = 'ghost'; p.alive = false; p.hp = 0; p.r = 0.5;
+  p.group.visible = true; setGhostLook(true);
+  toast('👻 유령이 되었다', '모든 걸 통과하고 공격받지 않는다 · E 로 공격할 수 있다 · 친구가 시체에 붕대나 구급상자를 쓰면 되살아난다');
+  if (PCORPSE.dungeon >= 0) teamNews('🪦 내 시체가 지하 굴 속에 있어서 친구들이 갈 수 없다…');
+}
+
+function revivePlayer(hp, by) {
+  var p = player;
+  if (p.form === 'child' && possessed) {             // 빌린 아이 몸은 제자리에 두고 원래 몸으로
+    if (possessed.state === 'possessed') {
+      possessed.state = 'follow'; possessed.pos.set(p.pos.x, 0, p.pos.z); possessed.group.visible = true;
+    }
+    possessed = null;
+  }
+  CHILD_BODY.group.visible = false;
+  p.form = 'body'; p.alive = true; p.hp = hp; p.r = 0.5; p.vel.set(0, 0, 0);
+  if (p.dungeon !== PCORPSE.dungeon) { p.dungeon = PCORPSE.dungeon; fadeFlash(); }
+  p.pos.copy(PCORPSE.pos);
+  PCORPSE.active = false; PCORPSE.group.visible = false;
+  p.group.visible = true; setGhostLook(false);
+  burst(p.pos.x, 1.2, p.pos.z, 0x9affb0, 18);
+  toast('✚ 되살아났다! 체력 ' + hp + '%', by + ' 되살려 주었다');
+}
+
+function updatePlayerForm(dt) {
+  var p = player;
+  if (p.form === 'ghost') {                         // 둥실둥실 떠다닌다
+    p.group.position.y = p.pos.y + 0.35 + Math.sin(game.time * 2.2) * 0.15;
+  } else if (p.form === 'child') {
+    var g = CHILD_BODY.group;
+    g.position.copy(p.pos); g.rotation.y = p.yaw;
+    animateHuman(CHILD_BODY, p.grounded && Math.hypot(p.vel.x, p.vel.z) > 0.5, Math.hypot(p.vel.x, p.vel.z), 0, dt);
+    // 아이 몸으로 모닥불에 닿으면 그 아이를 구한 것이다
+    if (possessed && possessed.state === 'possessed' && p.dungeon < 0 && campDist(p.pos) < Math.max(5, safeR())) {
+      var k = possessed; k.state = 'saved'; p.rescued++;
+      var a = p.rescued / 4 * Math.PI * 2 + 0.3;
+      k.pos.set(CAMP.x + Math.cos(a) * 6.3, 0, CAMP.z + Math.sin(a) * 6.3);
+      k.group.visible = true; k.marker.visible = false; k.group.position.copy(k.pos);
+      k.group.rotation.y = Math.atan2(CAMP.x - k.pos.x, CAMP.z - k.pos.z);
+      possessed = null;
+      toast('🎉 ' + k.name + '(이)가 모닥불에 닿았다! (' + p.rescued + ' / 4)', '나는 아직 아이 몸 — 친구가 시체에 붕대를 써 주면 원래 몸으로 돌아간다');
+    }
+  }
+  if (PCORPSE.active) PCORPSE.label.position.y = 2.6 + Math.sin(game.time * 2.5) * 0.12;
+}
+
 /* ------------------------------------------------------------------ *
  *  곰덫
  * ------------------------------------------------------------------ */
@@ -2039,6 +2174,7 @@ function restart() {
   var p = player;
   p.pos.set(0, 0, 6.5); p.vel.set(0, 0, 0); p.yaw = Math.PI; p.grounded = true;
   p.hp = 100; p.hunger = 100; p.stamina = 100; p.beam = 100; p.rescued = 0; p.hurtT = 0; p.swing = 0; p.alive = true;
+  resetForms();
   FIRE.fuel = 70; FIRE.fed = 0; FIRE.level = 1;
   BENCH.tier = 1; BENCH_PARTS.forEach(function (m) { m.visible = false; });
   TREES.forEach(function (t, i) { t.hp = 4; t.cut = false; t.regrow = 0; t.claim = null; setTreeShown(t, i, true); });
@@ -2054,7 +2190,7 @@ function restart() {
   resetNests(); resetSummon();
   BOTS.forEach(function (b) {
     var s = campSlot(b);
-    b.pos.set(s.x, 0, s.z); b.hp = 100; b.alive = true; b.downT = 0; b.state = 'idle'; b.target = null;
+    b.pos.set(s.x, 0, s.z); b.hp = 100; b.alive = true; b.downT = 0; b.kit = { bandage:1, medkit:0 }; b.reviveT = 0; b.state = 'idle'; b.target = null;
     b.carry = { log:0, scrap:0, raw:0, pelt:0, coal:0, fuel:0 }; b.actT = 0; b.swing = 0; b.tagHp = -1;
     b.group.rotation.set(0, 0, 0);
   });
@@ -2243,6 +2379,13 @@ function action() {
   actCool = 0.3;
   var p = player.pos;
 
+  if (player.form === 'ghost') {                     // 유령은 공격하고, 계단을 오르내릴 수만 있다
+    if (exitNear(p)) { exitDungeon(); return; }
+    var sd = stairsNear(p); if (sd) { enterDungeon(sd); return; }
+    var gw = nearestIn(beastsHere(), p, 3.5, liveBeast);
+    if (gw && Math.hypot(gw.pos.x - p.x, gw.pos.z - p.z) < 2.3 + gw.T.scale * 0.6) { player.swing = 0.3; hitBeast(gw, meleeDmg(), p.x, p.z, true); }
+    return;
+  }
   if (caveAction()) return;
   if (campDist(p) < 4.2) {
     var parts = [];
@@ -2317,6 +2460,7 @@ function action() {
 
 var EAT_ORDER = ['cooked', 'coconut', 'apple', 'carrot', 'berry', 'cake', 'raw'];
 function eat() {
+  if (player.form === 'ghost') { toast('👻 유령은 먹을 수 없다'); return; }
   var k = null;
   for (var i = 0; i < EAT_ORDER.length; i++) if (inv[EAT_ORDER[i]] > 0) { k = EAT_ORDER[i]; break; }
   if (!k) { toast('먹을 것이 없다', '열매·당근·사과를 줍거나 사냥하세요'); return; }
@@ -2328,6 +2472,19 @@ function eat() {
 }
 
 function heal() {
+  if (player.form === 'ghost') { toast('👻 유령은 아무것도 쓸 수 없다', '친구가 내 시체에 붕대나 구급상자를 써 주어야 한다'); return; }
+  var dead = deadBotNear(player.pos);
+  if (dead) {
+    var kk = inv.medkit > 0 ? 'medkit' : (inv.bandage > 0 ? 'bandage' : null);
+    if (!kk) { toast('✚ ' + dead.name + '을(를) 되살리려면', '붕대(체력 50%)나 구급상자(체력 100%)가 필요하다'); return; }
+    inv[kk]--;
+    dead.alive = true; dead.hp = kk === 'medkit' ? 100 : 50; dead.state = 'idle'; dead.target = null;
+    dead.group.rotation.z = 0; dead.group.position.y = 0; dead.tagHp = -1;
+    burst(dead.pos.x, 1.2, dead.pos.z, 0x9affb0, 16);
+    toast('✚ ' + dead.name + '이(가) 되살아났다!', ITEM[kk].name + ' — 체력 ' + dead.hp + '%');
+    teamNews(dead.name + ': 고마워! 살았다…');
+    return;
+  }
   var lack = 100 - player.hp;
   var k = (lack > 50 && inv.medkit > 0) ? 'medkit' : (inv.bandage > 0 ? 'bandage' : (inv.medkit > 0 ? 'medkit' : null));
   if (!k) { toast('치료할 것이 없다', '붕대·구급상자는 제작대나 보물상자에서'); return; }
@@ -2369,6 +2526,7 @@ function shoot() {
 function hurtHuman(h, dmg, fx, fz, push) {
   if (!h.alive) return;
   if (h.isPlayer) {
+    if (player.form === 'ghost') return;           // 유령은 공격받지 않는다
     dmg *= 1 - ARMORS[gear.armor].cut;
     h.hp -= dmg; h.hurtT = 0.5;
     var dx = h.pos.x - fx, dz = h.pos.z - fz, d = Math.hypot(dx, dz) || 1;
@@ -2378,9 +2536,11 @@ function hurtHuman(h, dmg, fx, fz, push) {
     var bx = h.pos.x - fx, bz = h.pos.z - fz, bd = Math.hypot(bx, bz) || 1;
     h.pos.x += bx / bd * push * 0.25; h.pos.z += bz / bd * push * 0.25;
     if (h.hp <= 0) {
-      h.hp = 0; h.alive = false; h.downT = 45;
+      h.hp = 0; h.alive = false; releaseClaim(h);
+      h.carry = { log:0, scrap:0, raw:0, pelt:0, coal:0, fuel:0 };
       h.group.rotation.z = Math.PI / 2; h.group.position.y = 0.3;
-      teamNews('💫 ' + h.name + '이(가) 쓰러졌다 — 45초 뒤 캠프에서 깨어난다');
+      teamNews('💀 ' + h.name + '이(가) 쓰러졌다 — 시체에 붕대(50%)나 구급상자(100%)를 쓰면 되살아난다');
+      toast('💀 ' + h.name + '이(가) 쓰러졌다!', '가서 H 로 붕대나 구급상자를 쓰면 되살릴 수 있다');
     }
   }
   burst(h.pos.x, 1.2, h.pos.z, 0xc02030, 8);
@@ -2446,6 +2606,8 @@ function updatePlayer(dt) {
   if (running) p.stamina = Math.max(0, p.stamina - 22 * dt);
   else p.stamina = Math.min(100, p.stamina + 14 * dt);
   var speed = running ? 9 : 5.6;
+  if (p.form === 'ghost') speed = running ? 9.5 : 7;
+  if (p.form === 'child') speed *= 0.9;
   if (p.hunger <= 0) speed *= 0.8;
   if (gear.armor === 2) speed *= 0.93;
 
@@ -2461,14 +2623,21 @@ function updatePlayer(dt) {
   p.vel.y -= G * dt;
   p.pos.addScaledVector(p.vel, dt);
   if (p.pos.y <= 0) { p.pos.y = 0; p.vel.y = 0; p.grounded = true; }
-  pushOut(p.pos, p.r);
-  if (p.dungeon >= 0) dungeonClamp(p.pos, p.r, DUNGEONS[p.dungeon]);
+  if (p.form !== 'ghost') pushOut(p.pos, p.r);
+  if (p.dungeon >= 0) {
+    var DG = DUNGEONS[p.dungeon];
+    if (p.form === 'ghost') {                        // 벽도 문도 통과하지만 굴 밖 허공으로는 못 간다
+      p.pos.x = Math.max(DG.x - HALL.w, Math.min(DG.x + HALL.w, p.pos.x));
+      p.pos.z = Math.max(DG.z + 0.5, Math.min(DG.z + HALL.len + ROOM.len, p.pos.z));
+    } else dungeonClamp(p.pos, p.r, DG);
+  }
   else if (Math.hypot(p.pos.x, p.pos.z) > WORLD_R + 2) {
     keepInWorld(p.pos, WORLD_R + 2);
     if (!p.edgeMsg || game.time - p.edgeMsg > 6) { p.edgeMsg = game.time; toast('🌫️ 안개가 너무 짙다', '더 이상 나갈 수 없습니다'); }
   }
 
   p.group.position.copy(p.pos); p.group.rotation.y = p.yaw;
+  updatePlayerForm(dt);
   if (p.swing > 0) p.swing -= dt;
   animateHuman(p.model, p.grounded && Math.hypot(p.vel.x, p.vel.z) > 0.5, Math.hypot(p.vel.x, p.vel.z), Math.max(0, p.swing), dt);
   var logs = inv.log;
@@ -2510,19 +2679,44 @@ function releaseClaim(b) {
 
 function updateBots(dt) {
   var night = isNight(), tLeft = DAY - (game.time % CYCLE);
+  // 나를 되살리러 갈 친구 — 땅 위에 있는 내 시체에만 갈 수 있다
+  reviver = null;
+  if (player.form !== 'body' && PCORPSE.active && PCORPSE.dungeon < 0) {
+    var bd0 = 1e9;
+    BOTS.forEach(function (b) {
+      if (!b.alive || b.kit.bandage + b.kit.medkit <= 0) return;
+      var d = Math.hypot(b.pos.x - PCORPSE.pos.x, b.pos.z - PCORPSE.pos.z);
+      if (d < bd0) { bd0 = d; reviver = b; }
+    });
+  }
   BOTS.forEach(function (b) {
     b.actT -= dt; b.feedT -= dt; b.moving = false; b.speed = 0;
     if (b.swing > 0) b.swing -= dt;
-    if (!b.alive) {
-      b.downT -= dt;
-      if (b.downT <= 0) {
-        var s = campSlot(b);
-        b.pos.set(s.x, 0, s.z); b.alive = true; b.hp = 60; b.state = 'idle'; releaseClaim(b);
-        b.carry = { log:0, scrap:0, raw:0, pelt:0, coal:0, fuel:0 };
-        b.group.rotation.z = 0; b.group.position.y = 0;
-        teamNews('💪 ' + b.name + '이(가) 캠프에서 다시 일어났다');
-      }
+    if (!b.alive) {                                   // 누가 되살려 주기 전에는 그대로 누워 있다
       b.group.position.set(b.pos.x, 0.3, b.pos.z);
+      drawTag(b);
+      return;
+    }
+    // 내가 쓰러져 유령이 되면, 구급품이 있는 가장 가까운 친구가 내 시체로 달려와 되살린다
+    if (b === reviver) {
+      var cp = PCORPSE.pos, dd = Math.hypot(cp.x - b.pos.x, cp.z - b.pos.z);
+      if (dd > 1.4) {
+        var ry = stepToward(b.pos, cp.x, cp.z, 6.2, dt);
+        if (ry !== null) { b.yaw = ry; b.moving = true; b.speed = 6.2; }
+        b.reviveT = 0;
+      } else {
+        b.reviveT = (b.reviveT || 0) + dt; b.swing = 0.3;
+        b.yaw = Math.atan2(cp.x - b.pos.x, cp.z - b.pos.z);
+        if (b.reviveT > 1.5) {
+          var med = b.kit.medkit > 0;
+          if (med) b.kit.medkit--; else b.kit.bandage--;
+          b.reviveT = 0;
+          revivePlayer(med ? 100 : 50, b.name + '이(가) ' + (med ? '구급상자' : '붕대') + '로');
+        }
+      }
+      pushOut(b.pos, b.r);
+      b.group.position.copy(b.pos); b.group.rotation.y = b.yaw;
+      animateHuman(b.model, b.moving, b.speed, Math.max(0, b.swing), dt);
       drawTag(b);
       return;
     }
@@ -2904,7 +3098,7 @@ function updateDeer(dt) {
 function updateKids(dt) {
   var p = player.pos;
   KIDS.forEach(function (k, i) {
-    if (k.state === 'saved') return;
+    if (k.state === 'saved' || k.state === 'possessed') return;
     if (k.state === 'locked' || k.state === 'free') {
       k.marker.rotation.y += dt * 2;
       k.marker.position.y = 2.3 + Math.sin(game.time * 3 + i) * 0.15;
@@ -2940,12 +3134,16 @@ function updateSurvival(dt) {
   var p = player;
   shotCool -= dt;
   if (tracer.visible) { tracer.userData.t -= dt; if (tracer.userData.t <= 0) tracer.visible = false; }
+  if (p.form === 'ghost') {
+    p.hp = 0;
+  } else {
   p.hunger = Math.max(0, p.hunger - 0.34 * (1 + SNOW.amount * 0.25) * dt);
   if (p.hunger <= 0) {
     p.hp -= 1.6 * dt;
     if (!p.starveMsg || game.time - p.starveMsg > 12) { p.starveMsg = game.time; toast('🍽️ 너무 배고프다!', '체력이 줄어듭니다 — Q 로 먹으세요'); }
   } else if (inSafe(p.pos) && p.hunger > 25) {
     p.hp = Math.min(100, p.hp + 2 * dt);
+  }
   }
   p.hurtT = Math.max(0, p.hurtT - dt);
 
@@ -2978,13 +3176,15 @@ function updateSurvival(dt) {
     }
     scatterItems(14, 22);                           // 아침마다 숲에 새 물건이 떨어진다
     newFallingNest();
+    BOTS.forEach(function (b) { if (b.alive) b.kit.bandage = Math.min(2, b.kit.bandage + 1); });   // 아침마다 붕대를 하나씩 챙긴다
     toast('🌅 ' + game.nights + '번째 밤을 버텼다!', '숲에 새 물건이 떨어졌다 · 99일 밤까지 ' + (NIGHTS_GOAL - game.nights) + '번');
   }
   game.wasNight = night;
 
-  if (p.hp <= 0) {
-    p.hp = 0;
-    gameOver('🌲 숲에서 쓰러졌다', game.nights + '번의 밤을 버텼습니다.');
+  if (p.hp <= 0 && p.form !== 'ghost') { p.hp = 0; playerDies(); }
+  // 나는 유령이고 살아 있는 친구도 없으면 끝
+  if (p.form === 'ghost' && !BOTS.some(function (b) { return b.alive; })) {
+    gameOver('👻 모두 쓰러졌다', '나도 친구들도 모두 쓰러져 되살려 줄 사람이 없습니다. ' + game.nights + '번의 밤을 버텼습니다.');
   }
 }
 
@@ -3346,6 +3546,13 @@ function bar(id, v, color) {
 }
 function promptText() {
   var p = player.pos;
+  if (player.form === 'ghost') {
+    var gw2 = nearestIn(beastsHere(), p, 2.9, liveBeast);
+    return gw2 ? '👻 E — ' + gw2.T.name + ' 공격' : (stairsNear(p) ? '⬇ E — 계단을 내려간다' : (exitNear(p) ? '⬆ E — 계단을 올라간다' : ''));
+  }
+  var db = deadBotNear(p);
+  if (db) return '✚ H — ' + db.name + ' 부활시키기 (' + (inv.medkit ? '구급상자 → 100%' : (inv.bandage ? '붕대 → 50%' : '붕대나 구급상자가 필요하다')) + ')';
+  if (PCORPSE.active && player.form === 'child' && near(p, PCORPSE.pos, 2.2)) return '🪦 내 시체 — 친구가 붕대나 구급상자를 쓰면 이 몸으로 돌아온다';
   var cp = cavePrompt();
   if (cp) return cp;
   var fn = fallingNestNear(p);
@@ -3387,7 +3594,7 @@ function updateHUD(dt) {
   var sm = document.getElementById('summonVal');
   sm.textContent = SUMMON.phase ? '소환 중!' : (SUMMON.cool > 0 ? Math.ceil(SUMMON.cool) + '초' : '준비됨');
   sm.style.color = SUMMON.cool > 0 || SUMMON.phase ? '#c8b0a0' : '#ffe07a';
-  document.getElementById('hpVal').textContent = Math.ceil(p.hp);
+  document.getElementById('hpVal').textContent = p.form === 'ghost' ? '👻 유령' : (p.form === 'child' ? '👶 ' + Math.ceil(p.hp) : Math.ceil(p.hp));
   document.getElementById('hungerVal').textContent = Math.ceil(p.hunger);
   document.getElementById('fuelVal').textContent = FIRE.fuel > 0 ? Math.ceil(FIRE.fuel) + '% · Lv' + FIRE.level : '꺼짐!';
 
@@ -3430,10 +3637,14 @@ function updateHUD(dt) {
   if (allies) h += '<div class="h">🐦 은혜 갚을 까치 ' + allies + '</div>';
   document.getElementById('inv').innerHTML = h;
 
-  var tl = '<div class="row"><span>🧑 나</span><span>❤ ' + Math.ceil(p.hp) + '</span></div>';
+  var tl = '<div class="row"><span>' + (p.form === 'ghost' ? '👻 나 <span style="opacity:.7">유령</span>' : (p.form === 'child' ? '👶 나 <span style="opacity:.7">아이 몸</span>' : '🧑 나')) +
+           '</span><span>' + (p.form === 'ghost' ? '—' : '❤ ' + Math.ceil(p.hp)) + '</span></div>';
   BOTS.forEach(function (b) {
     var st = !b.alive ? '💫 기절' : (b.state === 'home' ? (night ? '🔥 캠프' : '🎒 운반') : b.label);
-    tl += '<div class="row"><span>' + b.name + ' <span style="opacity:.7">' + st + '</span></span><span>❤ ' + Math.ceil(b.hp) + '</span></div>';
+    if (!b.alive) st = '💀 쓰러짐';
+    else if (b === reviver) st = '✚ 나를 살리러';
+    tl += '<div class="row"><span>' + b.name + ' <span style="opacity:.7">' + st + '</span></span><span>' +
+          (b.alive ? '❤ ' + Math.ceil(b.hp) : '✚') + (b.alive && b.kit.bandage + b.kit.medkit ? ' <span style="opacity:.6">🩹' + (b.kit.bandage + b.kit.medkit) + '</span>' : '') + '</span></div>';
   });
   document.getElementById('teamList').innerHTML = tl;
 
@@ -3489,7 +3700,7 @@ document.getElementById('againBtn').onclick = restart;
 window.SURVIVAL = {
   game:game, player:player, FIRE:FIRE, TREES:TREES, BUSHES:BUSHES, BEASTS:BEASTS, DEER:DEER, KIDS:KIDS,
   BOTS:BOTS, PICKUPS:PICKUPS, CHESTS:CHESTS, TRAPS:TRAPS, RECIPES:RECIPES, BENCH:BENCH, GRINDER:GRINDER,
-  STORE_POS:STORE_POS, DUNGEONS:DUNGEONS, SWORD:SWORD, enterDungeon:enterDungeon, exitDungeon:exitDungeon, throwDynamite:throwDynamite, NESTS:NESTS, MAGPIES:MAGPIES, SUMMON:SUMMON, useSummon:useSummon, fixNestForTest:function (n) { fixNest(n); }, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, SNOWMEN:SNOWMEN, FALL:FALL,
+  STORE_POS:STORE_POS, PCORPSE:PCORPSE, playerDies:playerDies, revivePlayer:revivePlayer, DUNGEONS:DUNGEONS, SWORD:SWORD, enterDungeon:enterDungeon, exitDungeon:exitDungeon, throwDynamite:throwDynamite, NESTS:NESTS, MAGPIES:MAGPIES, SUMMON:SUMMON, useSummon:useSummon, fixNestForTest:function (n) { fixNest(n); }, RAIN:RAIN, SEASON:SEASON, SNOW:SNOW, seasonNow:seasonNow, SNOWMEN:SNOWMEN, FALL:FALL,
   treeStyle:function () { return TREE_STYLE; }, inv:inv, gear:gear, store:store, CAMP:CAMP, keys:keys,
   action:action, eat:eat, heal:heal, shoot:shoot, placeTrap:placeTrap, inSafe:inSafe, restart:restart,
   isCraftOpen:function () { return craftOpen; },
