@@ -194,7 +194,7 @@
       <li>🌟 <b>G</b> 를 누르면 설탕 도망쳐!의 <b>소환</b>처럼 <b>배가 아주 큰 학생</b>이 나타나 적을 막아서고 <b>엉덩이 방귀</b>로 멀리 날려 버립니다 (30초마다 다시 쓸 수 있습니다).</li>
       <li>💀 <b>친구가 쓰러지면</b> 그대로 영원히 누워 있고, 시체 위에 <b>'✚ 부활'</b>이 뜹니다. 가까이서 <b>H</b> — 붕대면 체력 50%, 구급상자면 100%로 되살아납니다.</li>
       <li>👻 <b>내가 쓰러지면</b> 시체를 남기고 <b>유령</b>이 됩니다. 유령은 모든 걸 통과하고, 공격할 수 있고, 공격받지 않습니다. <b>아이를 데리고 가던 중</b>이었다면 그 <b>아이 몸으로</b> 되살아납니다. 친구가 내 시체에 붕대나 구급상자를 쓰면 원래 몸으로 돌아옵니다.</li>
-      <li>🌀 <b>흡수 구슬(B)</b>을 쓰면 배가 큰 아이가 앞에 나타나 <b>10×10m 사각형</b> 안의 동물을 모두 몸속으로 빨아들입니다. 먹을 때마다 배가 커지고, <b>10마리</b>를 먹으면 <b>펑!</b> 터지면서 먹었던 동물이 그 자리에서 도로 튀어나옵니다. 45초 안에 터지지 않으면 먹은 동물을 소화하고 떠납니다(고기·가죽은 내 것).</li>
+      <li>🌀 <b>흡수 구슬(B)</b>을 쓰면 배가 큰 아이가 앞에 나타나 <b>10×10m 사각형</b> 안의 동물을 모두 몸속으로 빨아들입니다. 먹을 때마다 배가 커지고, <b>5마리</b>를 먹으면 <b>펑!</b> 터지면서 먹었던 동물이 그 자리에서 도로 튀어나옵니다. 45초 안에 터지지 않으면 먹은 동물을 소화하고 떠납니다(고기·가죽은 내 것).</li>
       <li>👶 아이 4명은 <b>지하 굴</b>에 갇혀 있습니다. 모닥불에서 뻗은 <b>흙길</b>을 따라가면 <b>계단</b>이 나오고, 내려가면 <b>곰 소굴</b>입니다. 숲 어딘가의 <b>🧨 다이너마이트</b>(Z 로 던지기)로 곰을 날리거나 <b>🗡️ 푸른 검</b>을 찾아 싸우세요. 안쪽의 <b>단단한 문</b>은 검이나 다이너마이트로만 부술 수 있고, 문 너머 방에 아이가 있습니다.</li>
     </ul>
     <button id="startBtn">숲으로 들어가기</button>
@@ -1983,7 +1983,7 @@ function updatePlayerForm(dt) {
 
 var ABSORB = { active:false, x:0, z:0, dungeon:-1, t:0, eaten:[], sucking:[], group:new THREE.Group(), belly:null,
                square:null, counter:null, counterC:null, grow:0, burstT:0 };
-var ABSORB_HALF = 5, ABSORB_MAX = 10, ABSORB_LIFE = 45;
+var ABSORB_HALF = 5, ABSORB_MAX = 5, ABSORB_LIFE = 45;
 
 (function buildAbsorb() {
   var g = ABSORB.group, skin = mat(0xf0c69c, 0.85), shirt = mat(0x5a8ad0, 0.9), pants = mat(0x2a3a5a, 0.85);
@@ -2022,7 +2022,7 @@ function drawAbsorbCounter() {
   x.clearRect(0, 0, 128, 64);
   x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(8, 8, 112, 48);
   x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
-  x.fillStyle = ABSORB.eaten.length >= ABSORB_MAX - 2 ? '#ff8a6a' : '#ffffff';
+  x.fillStyle = ABSORB.eaten.length >= ABSORB_MAX - 1 ? '#ff8a6a' : '#ffffff';
   x.fillText(ABSORB.eaten.length + ' / ' + ABSORB_MAX, 64, 44);
   ABSORB.counter.material.map.needsUpdate = true;
 }
@@ -2034,10 +2034,10 @@ function resetAbsorb() {
 }
 
 function useAbsorb() {
-  if (player.form === 'ghost') { toast('👻 유령은 아이템을 쓸 수 없다'); return; }
-  if (ABSORB.active && ABSORB.dungeon === player.dungeon) { toast('🌀 배가 큰 아이가 이미 나와 있다'); return; }
+  if (player.form === 'ghost') return;
+  if (ABSORB.active && ABSORB.dungeon === player.dungeon) return;
   if (ABSORB.active) absorbLeave();                  // 다른 곳에 남겨 둔 아이는 먹은 것을 소화하고 떠난다
-  if (inv.absorb <= 0) { toast('🌀 흡수 구슬이 없다', '제작대 2단계에서 만들거나 보물상자에서 찾으세요'); return; }
+  if (inv.absorb <= 0) return;
   inv.absorb--;
   var fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   var pos = new THREE.Vector3(player.pos.x + fx * 7, 0, player.pos.z + fz * 7);
@@ -2103,10 +2103,10 @@ function updateAbsorb(dt) {
   // 먹을수록 배가 커진다
   A.grow = Math.max(0, A.grow - dt);
   var n = A.eaten.length;
-  var bs = 1 + n * 0.16 + A.grow * 0.4 + Math.sin(game.time * 6) * 0.02 * n;
+  var bs = 1 + n * 0.3 + A.grow * 0.4 + Math.sin(game.time * 6) * 0.03 * n;
   A.belly.scale.set(bs, bs * 0.95, bs * 1.1);
   g.position.y = Math.abs(Math.sin(game.time * 3)) * 0.1;
-  g.rotation.z = n >= ABSORB_MAX - 2 ? Math.sin(game.time * 30) * 0.03 : 0;   // 곧 터질 듯 부들부들
+  g.rotation.z = n >= ABSORB_MAX - 1 ? Math.sin(game.time * 30) * 0.03 : 0;   // 곧 터질 듯 부들부들
   if (n >= ABSORB_MAX && !A.sucking.length) { absorbBurst(); return; }
   if (A.t <= 0 && !A.sucking.length) absorbLeave();
 }
@@ -2149,7 +2149,6 @@ function absorbLeave() {
     meat += o.T.meat; pelt += o.T.pelt;
   });
   inv.raw += meat; inv.pelt += pelt;
-  if (A.eaten.length) toast('🌀 배가 큰 아이가 ' + A.eaten.length + '마리를 소화하고 떠났다', '날고기 +' + meat + ' · 가죽 +' + pelt);
   burst(A.x, 2, A.z, 0x9ad0ff, 14);
   A.eaten.length = 0;
   A.active = false; A.group.visible = false; A.square.visible = false;
@@ -2440,7 +2439,7 @@ var RECIPES = [
   { tier:2, name:'리볼버',        desc:'F 로 쏜다 (피해 3) · 탄약 6발',        cost:{ scrap:20 },        ok:function () { return !gear.revolver; }, make:function () { gear.revolver = true; inv.ammo += 6; } },
   { tier:2, name:'철 갑옷',       desc:'받는 피해 -45%',                    cost:{ scrap:28 },        ok:function () { return gear.armor < 2; }, make:function () { gear.armor = 2; } },
   { tier:2, name:'거대한 자루',    desc:'40개까지 든다',                     cost:{ pelt:4, scrap:14 }, ok:function () { return gear.sack < 2; }, make:function () { gear.sack = 2; } },
-  { tier:2, name:'흡수 구슬',      desc:'B 로 사용 — 배가 큰 아이가 10×10 안의 동물을 빨아들인다', cost:{ pelt:2, scrap:12 }, make:function () { inv.absorb++; } },
+  { tier:2, name:'흡수 구슬',      desc:'B 로 사용 — 배가 큰 아이가 10×10 안의 동물을 빨아들인다 (5마리면 펑)', cost:{ pelt:2, scrap:12 }, make:function () { inv.absorb++; } },
   { tier:2, name:'구급상자',       desc:'H 로 사용 — 체력 +75',               cost:{ pelt:1, scrap:6 }, make:function () { inv.medkit++; } },
   { tier:2, name:'제작대 3단계',   desc:'최고급 물건이 열린다',                cost:{ log:20, scrap:35 }, ok:function () { return BENCH.tier < 3; }, make:function () { setBenchTier(3); } },
   { tier:3, name:'전기톱',        desc:'나무를 한 번에 · 짐승 피해 3',          cost:{ scrap:35, fuel:1 }, ok:function () { return gear.axe < 3; }, make:function () { gear.axe = 3; } },
