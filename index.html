@@ -179,6 +179,7 @@
       <div class="key"><b>G</b> 소환</div>
       <div class="key"><b>Z</b> 다이너마이트 던지기</div>
       <div class="key"><b>B</b> 흡수 구슬</div>
+      <div class="key"><b>N</b> 흡수 약</div>
     </div>
     <ul class="rules">
       <li>🔥 <b>모닥불</b>에 통나무·석탄·연료통을 넣어 불을 지키세요. 불빛 안은 안전하고, 많이 넣을수록 레벨이 올라 넓어집니다.</li>
@@ -194,6 +195,7 @@
       <li>🌟 <b>G</b> 를 누르면 설탕 도망쳐!의 <b>소환</b>처럼 <b>배가 아주 큰 학생</b>이 나타나 적을 막아서고 <b>엉덩이 방귀</b>로 멀리 날려 버립니다 (30초마다 다시 쓸 수 있습니다).</li>
       <li>💀 <b>친구가 쓰러지면</b> 그대로 영원히 누워 있고, 시체 위에 <b>'✚ 부활'</b>이 뜹니다. 가까이서 <b>H</b> — 붕대면 체력 50%, 구급상자면 100%로 되살아납니다.</li>
       <li>👻 <b>내가 쓰러지면</b> 시체를 남기고 <b>유령</b>이 됩니다. 유령은 모든 걸 통과하고, 공격할 수 있고, 공격받지 않습니다. <b>아이를 데리고 가던 중</b>이었다면 그 <b>아이 몸으로</b> 되살아납니다. 친구가 내 시체에 붕대나 구급상자를 쓰면 원래 몸으로 돌아옵니다.</li>
+      <li>🧪 <b>흡수 약(N)</b>을 흡수 아이에게 먹이면 한도가 <b>5마리씩</b> 늘어납니다. 흡수 아이는 가까이서 <b>E</b> 로 <b>들고 옮길</b> 수 있고, 몇 초마다 <b>방귀</b>를 뀌어 엉덩이 쪽 동물을 밀어냅니다.</li>
       <li>🌀 <b>흡수 구슬(B)</b>을 쓰면 배가 큰 아이가 앞에 나타나 <b>10×10m 사각형</b> 안의 동물을 모두 몸속으로 빨아들입니다. 먹을 때마다 배가 커지고, <b>5마리</b>를 먹으면 <b>펑!</b> 터지면서 먹었던 동물이 그 자리에서 도로 튀어나옵니다. 45초 안에 터지지 않으면 먹은 동물을 소화하고 떠납니다(고기·가죽은 내 것).</li>
       <li>👶 아이 4명은 <b>지하 굴</b>에 갇혀 있습니다. 모닥불에서 뻗은 <b>흙길</b>을 따라가면 <b>계단</b>이 나오고, 내려가면 <b>곰 소굴</b>입니다. 숲 어딘가의 <b>🧨 다이너마이트</b>(Z 로 던지기)로 곰을 날리거나 <b>🗡️ 푸른 검</b>을 찾아 싸우세요. 안쪽의 <b>단단한 문</b>은 검이나 다이너마이트로만 부술 수 있고, 문 너머 방에 아이가 있습니다.</li>
     </ul>
@@ -281,7 +283,8 @@ var ITEM = {
   rammo:  { name:'소총 탄약',   icon:'▪' },
   trap:   { name:'곰덫',       icon:'🪤' },
   dynamite:{ name:'다이너마이트', icon:'🧨' },
-  absorb: { name:'흡수 구슬', icon:'🌀' }
+  absorb: { name:'흡수 구슬', icon:'🌀' },
+  potion: { name:'흡수 약', icon:'🧪' }
 };
 var BULK_KEYS = Object.keys(ITEM).filter(function (k) { return ITEM[k].bulk; });
 var SCRAP_KEYS = BULK_KEYS.filter(function (k) { return ITEM[k].scrap; });
@@ -298,7 +301,7 @@ function resetInventory() {
   gear.axe = 0; gear.spear = false; gear.revolver = false; gear.rifle = false;
   gear.armor = 0; gear.light = 0; gear.sack = 0; gear.bigFire = false; gear.sword = false;
   store.log = 0; store.scrap = 0; store.raw = 0; store.cooked = 0; store.pelt = 0;
-  inv.berry = 2; inv.absorb = 1;
+  inv.berry = 2; inv.absorb = 1; inv.potion = 1;
 }
 function bulkCount() { return BULK_KEYS.reduce(function (s, k) { return s + inv[k]; }, 0); }
 function bulkCap() { return SACKS[gear.sack].cap; }
@@ -646,6 +649,11 @@ function pickupMesh(kind) {
     var lf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 5), PM.green); lf.rotation.z = -Math.PI / 2; lf.position.set(0.35, 0.12, 0); g.add(lf);
   } else if (kind === 'apple') {
     m = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), PM.apple); m.position.y = 0.17; g.add(m);
+  } else if (kind === 'potion') {                  // 보랏빛 물약 병
+    var glass = new THREE.MeshStandardMaterial({ color:0xb060ff, emissive:0x6a20c0, emissiveIntensity:0.7, roughness:0.2, transparent:true, opacity:0.85 });
+    m = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), glass); m.position.y = 0.2; g.add(m);
+    var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.18, 8), glass); neck.position.y = 0.44; g.add(neck);
+    var cork = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.08, 8), mat(0x8a6a44, 0.9)); cork.position.y = 0.56; g.add(cork);
   } else if (kind === 'dynamite') {
     var dm = dynamiteMesh(); dm.position.y = 0.05; g.add(dm);
   } else if (kind === 'log') {
@@ -676,7 +684,7 @@ function freeSpot(minR, maxR) {
   }
   return { x:minR, z:0 };
 }
-var SCATTER = [['bolt', 5], ['sheet', 4], ['radio', 2], ['fan', 1.5], ['tire', 2], ['coal', 2.5], ['fuel', 1],
+var SCATTER = [['potion', 0.5], ['bolt', 5], ['sheet', 4], ['radio', 2], ['fan', 1.5], ['tire', 2], ['coal', 2.5], ['fuel', 1],
                ['carrot', 3], ['apple', 2.5]];
 function scatterItems(n, minR) {
   var total = SCATTER.reduce(function (s, e) { return s + e[1]; }, 0);
@@ -697,10 +705,10 @@ var LOOT_NEAR = [['bandage', 1, 3], ['carrot', 2, 3], ['apple', 2, 2], ['bolt', 
                  ['coal', 1, 2], ['cooked', 1, 2], ['ammo', 6, 1], ['gear:axe1', 0, 1], ['gear:sack1', 0, 1],
                  ['gear:armor1', 0, 0.8], ['gear:spear', 0, 0.8]];
 // 굴 속 상자 — 곰 소굴까지 내려온 보람이 있게
-var LOOT_CAVE = [['absorb', 1, 0.9], ['dynamite', 2, 2.5], ['medkit', 1, 2], ['cake', 1, 1], ['cooked', 3, 1.5], ['gear:revolver', 0, 1],
+var LOOT_CAVE = [['absorb', 1, 0.9], ['potion', 1, 1], ['dynamite', 2, 2.5], ['medkit', 1, 2], ['cake', 1, 1], ['cooked', 3, 1.5], ['gear:revolver', 0, 1],
                  ['ammo', 6, 1.5], ['gear:light1', 0, 0.8], ['gear:sack2', 0, 0.7], ['gear:axe2', 0, 0.8],
                  ['gear:rifle', 0, 0.6], ['rammo', 5, 1], ['gear:armor2', 0, 0.7], ['sheet', 3, 2], ['fan', 2, 1]];
-var LOOT_FAR = [['absorb', 1, 0.7], ['dynamite', 1, 1], ['medkit', 1, 3], ['cake', 1, 1.2], ['gear:revolver', 0, 1], ['ammo', 6, 2], ['gear:light1', 0, 1],
+var LOOT_FAR = [['absorb', 1, 0.7], ['potion', 1, 0.8], ['dynamite', 1, 1], ['medkit', 1, 3], ['cake', 1, 1.2], ['gear:revolver', 0, 1], ['ammo', 6, 2], ['gear:light1', 0, 1],
                 ['gear:sack1', 0, 1], ['gear:sack2', 0, 0.5], ['gear:axe2', 0, 0.7], ['gear:rifle', 0, 0.4],
                 ['rammo', 5, 1], ['gear:armor2', 0, 0.4], ['fuel', 1, 2], ['sheet', 2, 2], ['fan', 1, 1.2]];
 
@@ -2015,6 +2023,14 @@ var ABSORB_HALF = 5, ABSORB_MAX = 5, ABSORB_LIFE = 45;
   var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true }));
   sp.scale.set(1.8, 0.9, 1); sp.position.y = 5.0; g.add(sp);
   ABSORB.counter = sp; ABSORB.counterC = c;
+  // 방귀 구름
+  var b2 = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshBasicMaterial({ color:0xe8dc55, transparent:true, opacity:0, depthWrite:false }));
+  b2.visible = false; scene.add(b2);
+  ABSORB.fart = b2;
+  // 엉덩이
+  var butt = new THREE.Mesh(new THREE.SphereGeometry(0.9, 14, 10), pants);
+  butt.scale.set(1.25, 0.8, 0.8); butt.position.set(0, 1.35, -0.85); g.add(butt);
 })();
 
 function drawAbsorbCounter() {
@@ -2022,14 +2038,15 @@ function drawAbsorbCounter() {
   x.clearRect(0, 0, 128, 64);
   x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(8, 8, 112, 48);
   x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
-  x.fillStyle = ABSORB.eaten.length >= ABSORB_MAX - 1 ? '#ff8a6a' : '#ffffff';
-  x.fillText(ABSORB.eaten.length + ' / ' + ABSORB_MAX, 64, 44);
+  x.fillStyle = ABSORB.eaten.length >= ABSORB.max - 1 ? '#ff8a6a' : '#ffffff';
+  x.fillText(ABSORB.eaten.length + ' / ' + ABSORB.max, 64, 44);
   ABSORB.counter.material.map.needsUpdate = true;
 }
 
 function resetAbsorb() {
   ABSORB.active = false; ABSORB.group.visible = false; ABSORB.square.visible = false;
-  ABSORB.eaten.length = 0; ABSORB.sucking.length = 0; ABSORB.burstT = 0;
+  ABSORB.eaten.length = 0; ABSORB.sucking.length = 0; ABSORB.burstT = 0; ABSORB.carried = false; ABSORB.max = ABSORB_MAX;
+  ABSORB.fart.visible = false;
   DEER.eaten = false;
 }
 
@@ -2045,6 +2062,7 @@ function useAbsorb() {
   else keepInWorld(pos, WORLD_R - 2);
   ABSORB.active = true; ABSORB.x = pos.x; ABSORB.z = pos.z; ABSORB.dungeon = player.dungeon;
   ABSORB.t = ABSORB_LIFE; ABSORB.grow = 0; ABSORB.eaten.length = 0; ABSORB.sucking.length = 0;
+  ABSORB.max = ABSORB_MAX; ABSORB.carried = false; ABSORB.fartT = 4 + Math.random() * 3;
   ABSORB.group.position.set(pos.x, 0, pos.z);
   ABSORB.group.rotation.y = Math.atan2(player.pos.x - pos.x, player.pos.z - pos.z);
   ABSORB.group.scale.setScalar(0.01); ABSORB.group.visible = true;
@@ -2064,18 +2082,42 @@ function updateAbsorb(dt) {
   var A = ABSORB, g = A.group;
   g.scale.setScalar(Math.min(1, g.scale.x + dt * 3));
   A.t -= dt;
+  // 들고 다니는 중 — 내 뒤를 따라온다 (사각형도 같이)
+  if (A.carried) {
+    if (player.form === 'ghost') A.carried = false;
+    else {
+      if (A.dungeon !== player.dungeon) {            // 계단을 함께 오르내린다
+        A.dungeon = player.dungeon; A.x = player.pos.x; A.z = player.pos.z;
+      }
+      var tx = player.pos.x - Math.sin(player.yaw) * 3.2, tz = player.pos.z - Math.cos(player.yaw) * 3.2;
+      A.x += (tx - A.x) * Math.min(1, dt * 6); A.z += (tz - A.z) * Math.min(1, dt * 6);
+      g.rotation.y = player.yaw;
+    }
+  }
+  g.position.x = A.x; g.position.z = A.z;
+  A.square.position.set(A.x, 0, A.z);
+  // 방귀 — 엉덩이 쪽으로 노란 구름, 가까운 동물은 휙 밀려난다
+  A.fartT -= dt;
+  if (A.fartT <= 0) { A.fartT = 6 + Math.random() * 4; absorbFart(); }
+  if (A.fart.visible) {
+    A.fart.userData.t += dt;
+    var fk = A.fart.userData.t / 2.2;
+    A.fart.scale.setScalar(A.fart.userData.r * Math.min(1, fk * 4));
+    A.fart.material.opacity = 0.42 * Math.max(0, 1 - fk);
+    if (fk >= 1) A.fart.visible = false;
+  }
   var full = A.eaten.length + A.sucking.length;
   // 사각형 안의 동물을 빨아들이기 시작한다
-  if (full < ABSORB_MAX) {
+  if (full < A.max) {
     absorbCandidates().forEach(function (w) {
-      if (A.eaten.length + A.sucking.length >= ABSORB_MAX) return;
+      if (A.eaten.length + A.sucking.length >= A.max) return;
       if (w.dead > 0 || w.eaten || w.fly) return;
       if (Math.abs(w.pos.x - A.x) > ABSORB_HALF || Math.abs(w.pos.z - A.z) > ABSORB_HALF) return;
       w.dead = 1e9; w.target = null; w.claim = null;   // 빨려 드는 동안은 아무것도 못 한다
       A.sucking.push({ o:w, t:0, fx:w.pos.x, fz:w.pos.z, fy:w.y || 0 });
     });
     if (A.dungeon < 0 && DEER.state !== 'gone' && !DEER.eaten && !DEER.fly && !DEER.sucking &&
-        A.eaten.length + A.sucking.length < ABSORB_MAX &&
+        A.eaten.length + A.sucking.length < A.max &&
         Math.abs(DEER.pos.x - A.x) <= ABSORB_HALF && Math.abs(DEER.pos.z - A.z) <= ABSORB_HALF) {
       DEER.sucking = true;
       A.sucking.push({ o:DEER, t:0, fx:DEER.pos.x, fz:DEER.pos.z, fy:0 });
@@ -2103,11 +2145,11 @@ function updateAbsorb(dt) {
   // 먹을수록 배가 커진다
   A.grow = Math.max(0, A.grow - dt);
   var n = A.eaten.length;
-  var bs = 1 + n * 0.3 + A.grow * 0.4 + Math.sin(game.time * 6) * 0.03 * n;
+  var bs = 1 + n * Math.max(0.12, 1.5 / A.max) + A.grow * 0.4 + Math.sin(game.time * 6) * 0.03 * Math.min(n, 8);
   A.belly.scale.set(bs, bs * 0.95, bs * 1.1);
   g.position.y = Math.abs(Math.sin(game.time * 3)) * 0.1;
-  g.rotation.z = n >= ABSORB_MAX - 1 ? Math.sin(game.time * 30) * 0.03 : 0;   // 곧 터질 듯 부들부들
-  if (n >= ABSORB_MAX && !A.sucking.length) { absorbBurst(); return; }
+  g.rotation.z = n >= A.max - 1 ? Math.sin(game.time * 30) * 0.03 : 0;   // 곧 터질 듯 부들부들
+  if (n >= A.max && !A.sucking.length) { absorbBurst(); return; }
   if (A.t <= 0 && !A.sucking.length) absorbLeave();
 }
 
@@ -2136,7 +2178,7 @@ function absorbBurst() {
     }
     if (o.dungeon) { o.sleep = false; o.hurtWake = false; }
   });
-  A.eaten.length = 0;
+  A.eaten.length = 0; A.carried = false; A.fart.visible = false;
   A.active = false; A.group.visible = false; A.square.visible = false;
 }
 
@@ -2150,8 +2192,44 @@ function absorbLeave() {
   });
   inv.raw += meat; inv.pelt += pelt;
   burst(A.x, 2, A.z, 0x9ad0ff, 14);
-  A.eaten.length = 0;
+  A.eaten.length = 0; A.carried = false; A.fart.visible = false;
   A.active = false; A.group.visible = false; A.square.visible = false;
+}
+
+function absorbFart() {
+  var A = ABSORB, yaw = A.group.rotation.y;
+  var bx = A.x - Math.sin(yaw) * 1.6, bz = A.z - Math.cos(yaw) * 1.6;
+  var r = 6 + A.eaten.length * 0.5;                  // 많이 먹을수록 방귀도 크다
+  A.fart.position.set(bx, 1.4, bz); A.fart.userData.t = 0; A.fart.userData.r = r; A.fart.visible = true;
+  A.group.position.y = 0.25;
+  absorbCandidates().forEach(function (w) {
+    if (w.dead > 0 || w.eaten || w.fly) return;
+    var dx = w.pos.x - bx, dz = w.pos.z - bz, d = Math.hypot(dx, dz);
+    if (d > r) return;
+    if (hitBeast(w, 2, bx, bz, true)) return;
+    w.pos.x += dx / (d || 1) * 5; w.pos.z += dz / (d || 1) * 5; w.knock = 1.8; w.sleep = false;
+    if (w.dungeon) dungeonClamp(w.pos, 1.3, w.dungeon); else keepInWorld(w.pos, WORLD_R);
+  });
+  if (A.dungeon < 0 && DEER.state !== 'gone' && !DEER.eaten && !DEER.sucking && Math.hypot(DEER.pos.x - bx, DEER.pos.z - bz) < r) {
+    DEER.state = 'stun'; DEER.t = 2.5;
+  }
+}
+
+// 흡수 아이 들기 / 내려놓기 (E)
+function absorbNear(p, d) { return ABSORB.active && ABSORB.dungeon === player.dungeon && Math.hypot(ABSORB.x - p.x, ABSORB.z - p.z) < d; }
+function toggleCarryAbsorb() {
+  ABSORB.carried = !ABSORB.carried;
+  burst(ABSORB.x, 1.5, ABSORB.z, 0x9ad0ff, 6);
+}
+// 흡수 약 (N) — 가까이 있는 흡수 아이의 한도 +5
+function feedPotion() {
+  if (player.form === 'ghost' || inv.potion <= 0 || !absorbNear(player.pos, 8)) return;
+  inv.potion--;
+  ABSORB.max = Math.min(50, ABSORB.max + 5);
+  ABSORB.t = Math.max(ABSORB.t, 25);                // 약을 먹으면 기운이 나서 조금 더 머문다
+  ABSORB.grow = 0.5;
+  drawAbsorbCounter();
+  burst(ABSORB.x, 3.4, ABSORB.z, 0xb060ff, 14);
 }
 
 /* ------------------------------------------------------------------ *
@@ -2303,6 +2381,7 @@ addEventListener('keydown', function (e) {
   if (e.code === 'KeyG') useSummon();
   if (e.code === 'KeyZ') throwDynamite();
   if (e.code === 'KeyB') useAbsorb();
+  if (e.code === 'KeyN') feedPotion();
 });
 addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -2439,6 +2518,7 @@ var RECIPES = [
   { tier:2, name:'리볼버',        desc:'F 로 쏜다 (피해 3) · 탄약 6발',        cost:{ scrap:20 },        ok:function () { return !gear.revolver; }, make:function () { gear.revolver = true; inv.ammo += 6; } },
   { tier:2, name:'철 갑옷',       desc:'받는 피해 -45%',                    cost:{ scrap:28 },        ok:function () { return gear.armor < 2; }, make:function () { gear.armor = 2; } },
   { tier:2, name:'거대한 자루',    desc:'40개까지 든다',                     cost:{ pelt:4, scrap:14 }, ok:function () { return gear.sack < 2; }, make:function () { gear.sack = 2; } },
+  { tier:2, name:'흡수 약',        desc:'N 으로 흡수 아이에게 먹이면 한도 +5', cost:{ pelt:1, scrap:8 }, make:function () { inv.potion++; } },
   { tier:2, name:'흡수 구슬',      desc:'B 로 사용 — 배가 큰 아이가 10×10 안의 동물을 빨아들인다 (5마리면 펑)', cost:{ pelt:2, scrap:12 }, make:function () { inv.absorb++; } },
   { tier:2, name:'구급상자',       desc:'H 로 사용 — 체력 +75',               cost:{ pelt:1, scrap:6 }, make:function () { inv.medkit++; } },
   { tier:2, name:'제작대 3단계',   desc:'최고급 물건이 열린다',                cost:{ log:20, scrap:35 }, ok:function () { return BENCH.tier < 3; }, make:function () { setBenchTier(3); } },
@@ -2565,6 +2645,7 @@ function action() {
   actCool = 0.3;
   var p = player.pos;
 
+  if (player.form !== 'ghost' && (ABSORB.carried || absorbNear(p, 3.2))) { toggleCarryAbsorb(); return; }
   if (player.form === 'ghost') {                     // 유령은 공격하고, 계단을 오르내릴 수만 있다
     if (exitNear(p)) { exitDungeon(); return; }
     var sd = stairsNear(p); if (sd) { enterDungeon(sd); return; }
@@ -3739,6 +3820,8 @@ function promptText() {
     var gw2 = nearestIn(beastsHere(), p, 2.9, liveBeast);
     return gw2 ? '👻 E — ' + gw2.T.name + ' 공격' : (stairsNear(p) ? '⬇ E — 계단을 내려간다' : (exitNear(p) ? '⬆ E — 계단을 올라간다' : ''));
   }
+  if (absorbNear(p, 3.2)) return '🌀 E — 흡수 아이 ' + (ABSORB.carried ? '내려놓기' : '들고 가기') + (inv.potion ? ' · N — 🧪 약 먹이기 (한도 +5)' : '');
+  if (ABSORB.carried) return '🌀 흡수 아이를 데리고 가는 중 — E 로 내려놓기' + (inv.potion ? ' · N — 🧪 약 먹이기' : '');
   var db = deadBotNear(p);
   if (db) return '✚ H — ' + db.name + ' 부활시키기 (' + (inv.medkit ? '구급상자 → 100%' : (inv.bandage ? '붕대 → 50%' : '붕대나 구급상자가 필요하다')) + ')';
   if (PCORPSE.active && player.form === 'child' && near(p, PCORPSE.pos, 2.2)) return '🪦 내 시체 — 친구가 붕대나 구급상자를 쓰면 이 몸으로 돌아온다';
