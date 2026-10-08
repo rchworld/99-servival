@@ -207,7 +207,7 @@
       <li>🪺 나무에 <b>까치 둥지</b>가 있는데, 몇 개는 <b>떨어질 뻔합니다</b>. 가까이서 <b>점프</b>하면 둥지를 고쳐 줄 수 있고, 그 까치는 <b>은혜를 갚으려</b> 따라다니다 호랑이·구렁이가 오면 달려들어 공격하고 숨을 거둡니다.</li>
       <li>💀 <b>친구가 쓰러지면</b> 그대로 영원히 누워 있고, 시체 위에 <b>'✚ 부활'</b>이 뜹니다. 가까이서 <b>H</b> — 붕대면 체력 50%, 구급상자면 100%로 되살아납니다.</li>
       <li>👻 <b>내가 쓰러지면</b> 시체를 남기고 <b>유령</b>이 됩니다. 유령은 모든 걸 통과하고, 공격할 수 있고, 공격받지 않습니다. <b>아이를 데리고 가던 중</b>이었다면 그 <b>아이 몸으로</b> 되살아납니다. 친구가 내 시체에 붕대나 구급상자를 쓰면 원래 몸으로 돌아옵니다.</li>
-      <li>🗡️ <b>둘째 날부터</b> 언제 올지 모르게 <b>광신도</b>가 습격해 와서 사람을 공격합니다(처음 2명 → 다음 5명 → 그 뒤로는 10명). 모닥불 빛도 소용없으니 맞서 싸우세요.</li>
+      <li>🗡️ <b>둘째 날부터</b> 언제 올지 모르게 <b>광신도</b>가 습격해 와서 <b>모닥불로 몰려옵니다</b>(처음 2명 → 다음 5명 → 그 뒤로는 10명). 가는 길에 가까이 있는 사람을 공격하고, 모닥불에 닿으면 불을 짓밟아 꺼뜨리려 합니다. 맞서 싸우세요.</li>
       <li>🧳 광신도가 온 뒤에는 <b>떠돌이 상인</b>이 캠프에 들릅니다. <b>늑대 가죽 · 곰 가죽 · 토끼 발</b> 중 하나를 주면 무작위 물건 <b>3개</b>를 보여 주고, 그중 <b>하나</b>를 고를 수 있습니다. 🐰 <b>토끼</b>는 사람을 해치지 않고 도망 다니며, 잡으면 토끼 발이 나옵니다.</li>
       <li>👶 아이 4명은 <b>지하 굴</b>에 갇혀 있습니다. 모닥불에서 뻗은 <b>흙길</b>을 따라가면 <b>계단</b>이 나오고, 내려가면 <b>곰 소굴</b>입니다. 숲 어딘가의 <b>🧨 다이너마이트</b>(Z 로 던지기)로 곰을 날리거나 <b>🗡️ 푸른 검</b>을 찾아 싸우세요. 안쪽의 <b>단단한 문</b>은 검이나 다이너마이트로만 부술 수 있고, 문 너머 방에 아이가 있습니다.</li>
     </ul>
@@ -959,7 +959,7 @@ var BEAST_TYPES = {
 BEAST_TYPES.wolf.icon = '🐺'; BEAST_TYPES.bear.icon = '🐻';
 BEAST_TYPES.wolf.peltItem = 'wolfPelt'; BEAST_TYPES.bear.peltItem = 'bearPelt';
 // 광신도 — 습격해 와서 사람(플레이어와 친구)을 공격한다. 모닥불 빛도 소용없다. 다시 살아나지 않는다.
-BEAST_TYPES.cultist = { name:'광신도', icon:'🗡️', hp:6, dmg:[12, 16], speed:[4.8, 5.4], sight:[220, 220], meat:0, pelt:0, scale:1,
+BEAST_TYPES.cultist = { name:'광신도', icon:'🗡️', hp:6, dmg:[12, 16], speed:[4.8, 5.4], sight:[14, 16], meat:0, pelt:0, scale:1,
                         fur:0x5a1018, dark:0x2a0a0e, respawn:1e9, camp:true, noRespawn:true };
 // 토끼 — 사람을 해치지 않고 도망 다닌다. 잡으면 토끼 발
 BEAST_TYPES.rabbit = { name:'토끼', icon:'🐰', hp:1, dmg:[0, 0], speed:[6, 6], sight:[0, 0], meat:1, pelt:0, scale:1,
@@ -1948,7 +1948,7 @@ function startRaid() {
   }
   CULT.merchantT = 45;
   CULT.next = game.time + 160 + Math.random() * 280;
-  toast('🗡️ 광신도 ' + n + '명이 숲에서 몰려온다!', '모닥불 빛도 소용없다 — 맞서 싸우세요');
+  toast('🗡️ 광신도 ' + n + '명이 모닥불로 몰려온다!', '불을 꺼뜨리기 전에 막아 내세요');
   teamNews('🗡️ 광신도다! 다들 조심해!');
 }
 
@@ -3112,6 +3112,17 @@ function updateBeasts(dt) {
         if (tgt.isPlayer) toast(w.T.icon + ' ' + w.T.name + '에게 당했다!',
           w.type === 'cultist' ? 'E 로 맞서 싸우세요 — 친구들도 함께 싸웁니다' :
           (w.T.camp ? '모닥불 빛도 소용없다 — 까치가 있으면 도와주러 온다' : 'E 로 반격하거나 모닥불로 도망치세요'));
+      }
+    } else if (w.knock <= 0 && w.type === 'cultist') {
+      // 광신도는 모닥불로 몰려온다. 도착하면 불을 둘러싸고 짓밟아 연료를 줄인다
+      var ca = (BEASTS.indexOf(w) * 2.399) % (Math.PI * 2), cr = 2.6;
+      var gx = CAMP.x + Math.cos(ca) * cr, gz = CAMP.z + Math.sin(ca) * cr;
+      sp = (night ? w.T.speed[1] : w.T.speed[0]) * 0.85;
+      if (Math.hypot(gx - w.pos.x, gz - w.pos.z) > 0.6) yaw = stepToward(w.pos, gx, gz, sp, dt);
+      else { sp = 0; yaw = Math.atan2(CAMP.x - w.pos.x, CAMP.z - w.pos.z); }
+      if (campDist(w.pos) < 4.5 && FIRE.fuel > 0) {
+        FIRE.fuel = Math.max(0, FIRE.fuel - 1.2 * dt);
+        if (!w.stomped) { w.stomped = true; teamNews('🗡️ 광신도가 모닥불을 짓밟고 있다! 불이 꺼져 간다'); }
       }
     } else if (w.knock <= 0) {
       if (Math.hypot(w.goal.x - w.pos.x, w.goal.z - w.pos.z) < 0.6) {
