@@ -1117,6 +1117,11 @@ function hitBeast(w, dmg, fromX, fromZ, byPlayer) {
   burst(w.pos.x, 1.0, w.pos.z, 0x9a2020, 7);
   if (w.hp > 0) return false;
   w.dead = w.T.respawn; w.group.visible = false;
+  if (w.type === 'cultist') {                         // 광신도는 그 자리에 시체로 쓰러진다
+    w.group.visible = true; w.body.material = w.fur;
+    w.group.rotation.set(0, w.yaw, Math.PI / 2); w.group.position.set(w.pos.x, 0.3, w.pos.z);
+    if (w.bar) w.bar.visible = false;
+  }
   if (w.segGroup) w.segGroup.visible = false;
   if (byPlayer) {
     if (w.type === 'cultist') {                       // 광신도는 고철 조각을 떨어뜨린다
@@ -1927,7 +1932,9 @@ var tradeOpen = false, tradeOffer = null;
   MERCHANT.group = h.group; MERCHANT.model = h; MERCHANT.lamp = lamp;
 })();
 
+var CULT_CORPSES = [];
 function resetCult() {
+  CULT_CORPSES.forEach(function (g) { scene.remove(g); }); CULT_CORPSES.length = 0;
   CULT.wave = 0; CULT.merchantT = -1;
   CULT.next = CYCLE + Math.random() * CYCLE * 1.6;     // 첫날은 절대 오지 않는다
   MERCHANT.active = false; MERCHANT.group.visible = false;
@@ -3147,7 +3154,13 @@ function updateBeasts(dt) {
     w.legs.forEach(function (l, i) { l.rotation.x = (i === 0 || i === 3) ? s : -s; });
     w.body.material = w.flash > 0 ? HIT_MAT : w.fur;
   });
-  gone.forEach(function (w) { scene.remove(w.group); var k = BEASTS.indexOf(w); if (k >= 0) BEASTS.splice(k, 1); });
+  gone.forEach(function (w) {                        // 짐승 목록에서는 빼고, 시체는 땅에 남긴다
+    var k = BEASTS.indexOf(w); if (k >= 0) BEASTS.splice(k, 1);
+    if (w.type === 'cultist') {
+      CULT_CORPSES.push(w.group);
+      if (CULT_CORPSES.length > 40) scene.remove(CULT_CORPSES.shift());   // 너무 많이 쌓이면 오래된 것부터 치운다
+    } else scene.remove(w.group);
+  });
 }
 
 function updateSerpentBody(w, dt) {
